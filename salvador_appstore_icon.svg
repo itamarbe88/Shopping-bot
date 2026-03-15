@@ -1,0 +1,24 @@
+<svg width="1024" height="1024" viewBox="0 0 520 520" xmlns="http://www.w3.org/2000/svg">
+  <rect width="520" height="520" fill="white"/>
+  <path d="M28 128 Q28 92 68 92 L210 92" fill="none" stroke="#1a6dbf" stroke-width="22" stroke-linecap="round"/>
+  <path d="M42 128 L96 342 Q103 368 132 368 L422 368 Q450 368 457 342 L492 142 Q496 114 468 114 Z" fill="#3a9de0" stroke="#1a6dbf" stroke-width="4"/>
+  <line x1="56" y1="196" x2="484" y2="196" stroke="#1a6dbf" stroke-width="2" opacity="0.4"/>
+  <line x1="72" y1="274" x2="476" y2="274" stroke="#1a6dbf" stroke-width="2" opacity="0.4"/>
+  <line x1="168" y1="116" x2="130" y2="368" stroke="#1a6dbf" stroke-width="2" opacity="0.4"/>
+  <line x1="256" y1="114" x2="250" y2="368" stroke="#1a6dbf" stroke-width="2" opacity="0.4"/>
+  <line x1="344" y1="115" x2="350" y2="368" stroke="#1a6dbf" stroke-width="2" opacity="0.4"/>
+  <circle cx="148" cy="426" r="46" fill="#1a6dbf" stroke="#0a3a80" stroke-width="4.5"/>
+  <circle cx="148" cy="426" r="20" fill="white"/>
+  <circle cx="148" cy="426" r="8" fill="#0a3a80"/>
+  <circle cx="374" cy="426" r="46" fill="#1a6dbf" stroke="#0a3a80" stroke-width="4.5"/>
+  <circle cx="374" cy="426" r="20" fill="white"/>
+  <circle cx="374" cy="426" r="8" fill="#0a3a80"/>
+  <path d="M263 498 Q238 505 210 498 Q178 489 156 471 Q140 457 138 441 Q145 451 158 463 Q182 481 210 489 Q238 496 263 493" fill="none" stroke="#1a1a1a" stroke-width="1.6" stroke-linecap="round" opacity="0.9"/>
+  <path d="M263 499 Q232 510 198 502 Q164 492 142 473 Q127 458 125 440 Q133 451 148 463 Q174 482 202 491 Q233 499 263 495" fill="none" stroke="#111" stroke-width="1.2" stroke-linecap="round" opacity="0.8"/>
+  <path d="M138 441 Q124 420 120 397 Q117 375 123 362 Q130 352 137 362 Q141 375 139 397 Q138 418 138 441" fill="none" stroke="#1a1a1a" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M123 362 Q119 352 121 342 Q123 334 129 338 Q131 346 128 358" fill="none" stroke="#1a1a1a" stroke-width="0.9" stroke-linecap="round"/>
+  <path d="M267 498 Q292 505 320 498 Q352 489 374 471 Q390 457 392 441 Q385 451 372 463 Q348 481 320 489 Q292 496 267 493" fill="none" stroke="#1a1a1a" stroke-width="1.6" stroke-linecap="round" opacity="0.9"/>
+  <path d="M267 499 Q298 510 332 502 Q366 492 388 473 Q403 458 405 440 Q397 451 382 463 Q356 482 328 491 Q297 499 267 495" fill="none" stroke="#111" stroke-width="1.2" stroke-linecap="round" opacity="0.8"/>
+  <path d="M392 441 Q406 420 410 397 Q413 375 407 362 Q400 352 393 362 Q389 375 391 397 Q392 418 392 441" fill="none" stroke="#1a1a1a" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M407 362 Q411 352 409 342 Q407 334 401 338 Q399 346 402 358" fill="none" stroke="#1a1a1a" stroke-width="0.9" stroke-linecap="round"/>
+</svg>

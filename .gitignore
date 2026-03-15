@@ -1,0 +1,39 @@
+# Claude Code
+.claude/
+
+# Environment variables — never commit
+.env
+mobile/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# User data — never commit
+data/
+Inventory.csv
+last_shopping_list.json
+
+# Node / Expo
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/.metro-cache/
+
+# Android build artifacts
+mobile/android/.gradle/
+mobile/android/build/
+mobile/android/app/build/
+mobile/android/local.properties
+
+# iOS
+mobile/ios/Pods/
+mobile/ios/build/
+
+# Misc
+.DS_Store
+*.log

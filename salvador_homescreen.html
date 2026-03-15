@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Salvador — Home Screen Label</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, sans-serif;
+    background: #f0f4f8;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    gap: 48px;
+    padding: 40px 20px;
+  }
+
+  .section { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .sec-title { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; }
+
+  /* App Store icon */
+  .store-icon { border-radius: 48px; box-shadow: 0 4px 24px rgba(0,0,0,0.13); }
+
+  /* Home screen simulation */
+  .homescreen {
+    background: #d6eaf8;
+    border-radius: 28px;
+    padding: 36px 48px 44px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+  .home-icon { border-radius: 22px; box-shadow: 0 2px 10px rgba(0,0,0,0.12); }
+  .app-label {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 700;
+    font-size: 22px;
+    color: #1a6dbf;
+    direction: rtl;
+    text-align: center;
+    line-height: 1.5;
+    letter-spacing: 0.02em;
+    margin-top: 22px;
+  }
+
+  /* Download buttons */
+  .buttons { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 8px; }
+  button {
+    background: #1a6dbf;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button:hover { background: #1055a0; }
+  canvas { display: none; }
+</style>
+</head>
+<body>
+
+<div class="section">
+  <div class="sec-title">App Store Icon</div>
+  <img class="store-icon" src="salvador_appstore_icon.svg" width="220" height="220" id="storeImg"/>
+  <div class="buttons">
+    <button onclick="downloadSVG()">Download SVG</button>
+    <button onclick="downloadPNG(1024)">PNG 1024×1024 (App Store)</button>
+    <button onclick="downloadPNG(512)">PNG 512×512</button>
+    <button onclick="downloadPNG(192)">PNG 192×192 (Android)</button>
+    <button onclick="downloadPNG(96)">PNG 96×96 (Android)</button>
+  </div>
+</div>
+
+<div class="section">
+  <div class="sec-title">Home Screen Preview</div>
+  <div class="homescreen">
+    <img class="home-icon" src="salvador_appstore_icon.svg" width="110" height="110"/>
+    <div class="app-label">סלבדור - פשוט, לקנות!</div>
+  </div>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+function downloadSVG() {
+  const a = document.createElement('a');
+  a.href = 'salvador_appstore_icon.svg';
+  a.download = 'salvador_icon.svg';
+  a.click();
+}
+function downloadPNG(size) {
+  const canvas = document.getElementById('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const img = new Image();
+  img.onload = function() {
+    ctx.clearRect(0, 0, size, size);
+    ctx.drawImage(img, 0, 0, size, size);
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = 'salvador_icon_' + size + 'x' + size + '.png';
+    a.click();
+  };
+  img.src = 'salvador_appstore_icon.svg';
+}
+</script>
+</body>
+</html>
