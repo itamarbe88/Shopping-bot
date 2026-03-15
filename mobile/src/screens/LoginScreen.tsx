@@ -19,7 +19,6 @@ export default function LoginScreen() {
       const userInfo = await GoogleSignin.signIn();
       const tokens = await GoogleSignin.getTokens();
       const user = userInfo.data?.user;
-      Alert.alert("debug", `user: ${JSON.stringify(user?.email)}\nidToken: ${tokens.idToken ? "ok" : "NULL"}`);
       if (user && tokens.idToken) {
         await signIn(
           { id: user.id, name: user.name ?? "", email: user.email, picture: user.photo ?? "" },
@@ -37,8 +36,8 @@ export default function LoginScreen() {
   return (
     <View style={styles.container}>
       <CartIcon size={100} />
-      <Text style={styles.title}>מנהל המכולת</Text>
-      <Text style={styles.subtitle}>התחבר כדי להמשיך</Text>
+      <Text style={styles.title}>סלבדור</Text>
+      <Text style={styles.subtitle}>פשוט, לקנות!</Text>
 
       <TouchableOpacity
         style={[styles.googleBtn, loading && styles.googleBtnDisabled]}
