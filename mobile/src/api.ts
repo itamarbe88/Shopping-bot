@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // ── Configuration ──────────────────────────────────────────────────────────────
-export const BASE_URL = "http://10.100.102.166:8000";
+export const BASE_URL = "https://salvador-api-49266329932.europe-west1.run.app";
 
 // ── Auth helpers ────────────────────────────────────────────────────────────────
 let _onUnauthorized: (() => void) | null = null;
@@ -129,7 +129,7 @@ export async function upsertInventoryItem(item: {
 
 export async function deleteInventoryItem(item_name: string, type?: string): Promise<void> {
   const url = type
-    ? `${BASE_URL}/inventory/item/${encodeURIComponent(item_name)}?type=${encodeURIComponent(type)}`
+    ? `${BASE_URL}/inventory/item/${encodeURIComponent(item_name)}?item_type=${encodeURIComponent(type)}`
     : `${BASE_URL}/inventory/item/${encodeURIComponent(item_name)}`;
   const res = await apiFetch(url, { method: "DELETE", headers: await authHeaders() });
   if (!res.ok) throw new Error("Failed to delete inventory item");

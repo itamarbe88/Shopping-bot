@@ -14,7 +14,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { BASE_URL, PurchaseItem, ShoppingItem, addManualItem, addTemporaryItem, confirmPurchases, fetchInventory, fetchShoppingList, removeFromShoppingList } from "../api";
+import { PurchaseItem, ShoppingItem, addManualItem, addTemporaryItem, confirmPurchases, deleteInventoryItem, fetchInventory, fetchShoppingList, removeFromShoppingList } from "../api";
 import { getItemIcon } from "../icons";
 
 interface RouteParams { items: ShoppingItem[] }
@@ -266,10 +266,8 @@ export default function PurchaseScreen() {
                   <TouchableOpacity
                     style={{ width: 28, height: 28, alignItems: "center", justifyContent: "center" }}
                     onPress={() => {
-                      const url = row.item.is_temporary
-                        ? `${BASE_URL}/inventory/item/${encodeURIComponent(row.item.item_name)}`
-                        : `${BASE_URL}/inventory/item/${encodeURIComponent(row.item.item_name)}?type=manual`;
-                      fetch(url, { method: "DELETE" }).catch(() => {});
+                      const itemType = row.item.is_temporary ? "temporary" : "manual";
+                      deleteInventoryItem(row.item.item_name, itemType).catch(() => {});
                       removeFromShoppingList(row.item.item_name).catch(() => {});
                       setRows((prev) => prev.filter((_, i) => i !== index));
                     }}

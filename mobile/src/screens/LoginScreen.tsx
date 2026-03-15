@@ -1,11 +1,10 @@
 import React, { useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { GoogleSignin, statusCodes } from "@react-native-google-signin/google-signin";
-import Constants from "expo-constants";
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import CartIcon from "../CartIcon";
 import { useAuth } from "../context/AuthContext";
 
-const WEB_CLIENT_ID: string = Constants.expoConfig?.extra?.googleWebClientId ?? "";
+const WEB_CLIENT_ID = "49266329932-3kn7a61im5hc7pd9qhcc27hlq1m8bgk3.apps.googleusercontent.com";
 
 GoogleSignin.configure({ webClientId: WEB_CLIENT_ID });
 
@@ -20,6 +19,7 @@ export default function LoginScreen() {
       const userInfo = await GoogleSignin.signIn();
       const tokens = await GoogleSignin.getTokens();
       const user = userInfo.data?.user;
+      Alert.alert("debug", `user: ${JSON.stringify(user?.email)}\nidToken: ${tokens.idToken ? "ok" : "NULL"}`);
       if (user && tokens.idToken) {
         await signIn(
           { id: user.id, name: user.name ?? "", email: user.email, picture: user.photo ?? "" },
@@ -27,14 +27,8 @@ export default function LoginScreen() {
         );
       }
     } catch (error: any) {
-      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        // user cancelled
-      } else if (error.code === statusCodes.IN_PROGRESS) {
-        Alert.alert("שגיאה", "כניסה כבר בתהליך.");
-      } else {
-        Alert.alert("שגיאה", "ההתחברות נכשלה. נסה שוב.");
-        console.error(error);
-      }
+      Alert.alert("שגיאה", `קוד: ${error.code ?? "none"}\n${error.message ?? ""}`);
+      console.error(error);
     } finally {
       setLoading(false);
     }

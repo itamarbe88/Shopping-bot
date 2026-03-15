@@ -113,7 +113,7 @@ function RootNavigator() {
 
   React.useEffect(() => {
     if (user) {
-      fetchHousehold().then(setHousehold);
+      fetchHousehold().then(setHousehold).catch(() => setHousehold(null));
     } else {
       setHousehold(undefined);
     }

@@ -2,8 +2,10 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
 from pydantic import BaseModel
@@ -28,6 +30,11 @@ GOOGLE_CLIENT_ID = os.environ["GOOGLE_CLIENT_ID"]
 
 app = FastAPI(title="Grocery Inventory API")
 
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    print(f"[VALIDATION] {exc.errors()}")
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -46,7 +53,8 @@ def _verify_token(authorization: str) -> str:
         info = id_token.verify_oauth2_token(token, grequests.Request(), GOOGLE_CLIENT_ID)
         print(f"[AUTH] user_id={info['sub']} email={info.get('email')}")
         return info["sub"]
-    except Exception:
+    except Exception as e:
+        print(f"[AUTH] Token verification failed: {e}")
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
@@ -120,8 +128,8 @@ def create_or_update_item(body: UpsertItemRequest, hh: str = Depends(get_hh_id))
 
 
 @app.delete("/inventory/item/{item_name}")
-def remove_item(item_name: str, type: str | None = None, hh: str = Depends(get_hh_id)):
-    result = delete_item(hh, item_name, item_type=type)
+def remove_item(item_name: str, item_type: str | None = None, hh: str = Depends(get_hh_id)):
+    result = delete_item(hh, item_name, item_type=item_type)
     if not result["success"]:
         raise HTTPException(status_code=404, detail=result["message"])
     return result

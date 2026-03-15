@@ -14,8 +14,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { InventoryItem, fetchInventory } from "../api";
-import { BASE_URL } from "../api";
+import { InventoryItem, fetchInventory, deleteInventoryItem, upsertInventoryItem } from "../api";
 import { getItemIcon } from "../icons";
 
 const BLUE = "#0288D1";
@@ -132,7 +131,7 @@ export default function InventoryScreen() {
       {
         text: "מחק", style: "destructive", onPress: async () => {
           try {
-            await fetch(`${BASE_URL}/inventory/item/${encodeURIComponent(editItem.item_name)}`, { method: "DELETE" });
+            await deleteInventoryItem(editItem.item_name);
             setEditItem(null);
             load();
           } catch {
@@ -148,19 +147,15 @@ export default function InventoryScreen() {
     setSaving(true);
     try {
       if (editItem && editName.trim() !== editItem.item_name) {
-        await fetch(`${BASE_URL}/inventory/item/${encodeURIComponent(editItem.item_name)}`, { method: "DELETE" });
+        await deleteInventoryItem(editItem.item_name);
       }
-      await fetch(`${BASE_URL}/inventory/item`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          item_name: editName.trim(),
-          unit: editItem?.unit ?? "",
-          current_quantity: parseFloat(editCurrent) || 0,
-          desired_quantity: parseFloat(editDesired) || 0,
-          days_until_restock: parseInt(editDays) || 7,
-          last_purchased_date: editDate || undefined,
-        }),
+      await upsertInventoryItem({
+        item_name: editName.trim(),
+        unit: editItem?.unit ?? "",
+        current_quantity: parseFloat(editCurrent) || 0,
+        desired_quantity: parseFloat(editDesired) || 0,
+        days_until_restock: parseInt(editDays) || 7,
+        last_purchased_date: editDate || undefined,
       });
       setEditItem(null);
       load();
