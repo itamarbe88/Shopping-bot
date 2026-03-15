@@ -1,4 +1,3 @@
-import json
 import os
 from dotenv import load_dotenv
 load_dotenv()
@@ -10,17 +9,19 @@ from google.auth.transport import requests as grequests
 from pydantic import BaseModel
 
 from api.logic import (
-    _last_list_file,
     _load,
     _save,
     confirm_shopping,
     create_household,
     delete_item,
+    delete_last_list,
     generate_shopping_list,
     get_household_id,
     get_inventory,
     join_household,
+    read_last_list,
     upsert_item,
+    write_last_list,
 )
 
 GOOGLE_CLIENT_ID = os.environ["GOOGLE_CLIENT_ID"]
@@ -130,12 +131,7 @@ def remove_item(item_name: str, type: str | None = None, hh: str = Depends(get_h
 
 @app.get("/shopping-list/last")
 def last_shopping_list(hh: str = Depends(get_hh_id)):
-    llf = _last_list_file(hh)
-    cached_items = []
-    if llf.exists():
-        with open(llf, encoding="utf-8") as f:
-            cached_items = json.load(f)
-
+    cached_items = read_last_list(hh)
     cached_names = {i["item_name"] for i in cached_items}
     for item in _load(hh):
         item_type = item.get("type", "")
@@ -156,8 +152,7 @@ def last_shopping_list(hh: str = Depends(get_hh_id)):
             "item_type": item_type,
             "last_purchased_date": item.get("last_purchased_date") or None,
         })
-
-    return {"shopping_list": cached_items, "cached": llf.exists()}
+    return {"shopping_list": cached_items, "cached": len(cached_items) > 0}
 
 
 @app.get("/shopping-list")
@@ -176,22 +171,15 @@ class ConfirmRequest(BaseModel):
 
 @app.delete("/shopping-list/item/{item_name}")
 def remove_from_shopping_list(item_name: str, hh: str = Depends(get_hh_id)):
-    llf = _last_list_file(hh)
-    if llf.exists():
-        with open(llf, encoding="utf-8") as f:
-            items = json.load(f)
-        items = [i for i in items if i["item_name"] != item_name]
-        with open(llf, "w", encoding="utf-8") as f:
-            json.dump(items, f, ensure_ascii=False, indent=2)
+    items = read_last_list(hh)
+    items = [i for i in items if i["item_name"] != item_name]
+    write_last_list(hh, items)
     return {"success": True}
 
 
 @app.post("/shopping-list/confirm")
 def confirm(body: ConfirmRequest, hh: str = Depends(get_hh_id)):
     result = confirm_shopping(hh, [p.model_dump() for p in body.purchases])
-    llf = _last_list_file(hh)
-    if llf.exists():
-        llf.write_text("[]", encoding="utf-8")
     return result
 
 
