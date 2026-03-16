@@ -221,12 +221,25 @@ def generate_shopping_list(household_id: str, dry_run: bool = False) -> dict:
         return {"shopping_list": [], "message": "Inventory is empty."}
 
     today = date.today()
-    updated = False
-    depleted_preview = []
+    shopping_list = []
 
     for item in items:
-        if item.get("type", "") in ("temporary", "manual"):
+        item_type = item.get("type", "")
+        is_temporary = item_type == "temporary"
+        is_manual = item_type == "manual"
+
+        if is_temporary or is_manual:
+            raw_date = item.get("last_purchased_date", "")
+            shopping_list.append({
+                "item_name": item["item_name"],
+                "quantity_to_buy": int(float(item.get("desired_quantity", 1))),
+                "current_quantity": int(float(item.get("current_quantity", 0))),
+                "is_temporary": is_temporary,
+                "item_type": item_type,
+                "last_purchased_date": raw_date if raw_date else None,
+            })
             continue
+
         try:
             current = float(item["current_quantity"])
             desired = float(item["desired_quantity"])
@@ -234,50 +247,38 @@ def generate_shopping_list(household_id: str, dry_run: bool = False) -> dict:
             last_date = _parse_date(item["last_purchased_date"])
         except (ValueError, KeyError):
             continue
-        if current >= desired and (last_date + timedelta(days=days_cycle)) <= today:
-            new_current = int(current - desired)
-            if dry_run:
-                depleted_preview.append({"item_name": item["item_name"],
-                    "current_before": current, "depleted_by": desired, "current_after": new_current})
-            item["current_quantity"] = str(int(new_current))
-            updated = True
 
-    if updated and not dry_run:
-        _save(items, household_id)
+        date_arrived = (last_date + timedelta(days=days_cycle)) <= today
 
-    shopping_list = []
-    for item in items:
-        try:
-            current = float(item["current_quantity"])
-            desired = float(item["desired_quantity"])
-        except (ValueError, KeyError):
+        if current < desired:
+            qty_to_buy = int(desired - current)
+        elif current == desired and date_arrived:
+            qty_to_buy = int(desired)
+        elif current > desired and date_arrived:
+            qty_to_buy = int(desired - (current - desired))
+            if qty_to_buy <= 0:
+                continue
+        else:
             continue
-        item_type = item.get("type", "")
-        is_temporary = item_type == "temporary"
-        is_manual = item_type == "manual"
-        if current < desired or is_temporary or is_manual:
-            raw_date = item.get("last_purchased_date", "")
-            entry = {
-                "item_name": item["item_name"],
-                "quantity_to_buy": int(desired - current) if not (is_temporary or is_manual) else int(desired),
-                "current_quantity": int(current),
-                "is_temporary": is_temporary,
-                "item_type": item_type,
-                "last_purchased_date": raw_date if raw_date else None,
-            }
-            if not is_temporary and not is_manual and raw_date:
-                try:
-                    entry["next_purchase_date"] = (
-                        _parse_date(raw_date) + timedelta(days=int(item["days_until_restock"]))
-                    ).isoformat()
-                except (ValueError, KeyError):
-                    pass
-            shopping_list.append(entry)
 
-    result: dict = {"shopping_list": shopping_list, "dry_run": dry_run}
-    if dry_run:
-        result["simulation_depletions"] = depleted_preview
-    return result
+        raw_date = item.get("last_purchased_date", "")
+        entry = {
+            "item_name": item["item_name"],
+            "quantity_to_buy": qty_to_buy,
+            "current_quantity": int(current),
+            "is_temporary": False,
+            "item_type": item_type,
+            "last_purchased_date": raw_date if raw_date else None,
+        }
+        try:
+            entry["next_purchase_date"] = (
+                last_date + timedelta(days=days_cycle)
+            ).isoformat()
+        except Exception:
+            pass
+        shopping_list.append(entry)
+
+    return {"shopping_list": shopping_list, "dry_run": dry_run}
 
 
 def confirm_shopping(household_id: str, purchases: list[dict]) -> dict:
@@ -291,7 +292,14 @@ def confirm_shopping(household_id: str, purchases: list[dict]) -> dict:
             if item["item_name"] == name:
                 item_type = item.get("type", "")
                 if item_type in ("", "manual"):
-                    new_qty = int(float(item["current_quantity"])) + qty_bought
+                    current = float(item["current_quantity"])
+                    desired = float(item.get("desired_quantity", 0))
+                    if current >= desired:
+                        # date-triggered: account for consumption of one cycle
+                        new_qty = int(current - desired + qty_bought)
+                    else:
+                        # shortfall: just add what was bought
+                        new_qty = int(current + qty_bought)
                     item["current_quantity"] = str(new_qty)
                     item["last_purchased_date"] = today
                     if item_type == "manual":

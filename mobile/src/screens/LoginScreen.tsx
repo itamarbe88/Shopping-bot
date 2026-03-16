@@ -35,9 +35,8 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <CartIcon size={100} />
-      <Text style={styles.title}>סלבדור</Text>
-      <Text style={styles.subtitle}>פשוט, לקנות!</Text>
+      <CartIcon size={200} />
+      <Text style={styles.title}>סלבדור - פשוט, לקנות!</Text>
 
       <TouchableOpacity
         style={[styles.googleBtn, loading && styles.googleBtnDisabled]}
@@ -48,7 +47,6 @@ export default function LoginScreen() {
           <ActivityIndicator color="#fff" />
         ) : (
           <>
-            <Text style={styles.googleIcon}>G</Text>
             <Text style={styles.googleBtnText}>התחבר עם Google</Text>
           </>
         )}
@@ -60,8 +58,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f0f8ff", alignItems: "center", justifyContent: "center", padding: 32 },
   logo: { marginBottom: 16 },
-  title: { fontSize: 28, fontWeight: "800", color: "#0262A0", marginBottom: 8 },
-  subtitle: { fontSize: 16, color: "#888", marginBottom: 48 },
+  title: { fontSize: 24, fontWeight: "700", color: "#1a6dbf", marginTop: 16, marginBottom: 48, textAlign: "center" },
   googleBtn: {
     flexDirection: "row",
     alignItems: "center",

@@ -1,27 +1,29 @@
 import React from "react";
 import { SvgXml } from "react-native-svg";
 
-const xml = `<svg width="680" height="680" viewBox="0 0 680 680" xmlns="http://www.w3.org/2000/svg">
-  <rect x="140" y="60" width="400" height="400" rx="72" fill="white" stroke="#e0e0e0" stroke-width="1.5"/>
-  <path d="M185 175 Q185 148 210 148 L310 148" fill="none" stroke="#1a6dbf" stroke-width="18" stroke-linecap="round"/>
-  <path d="M205 175 L245 340 Q250 358 270 358 L460 358 Q478 358 483 340 L510 195 Q513 175 492 175 Z" fill="#3a9de0" stroke="#1a6dbf" stroke-width="3"/>
-  <line x1="215" y1="235" x2="503" y2="235" stroke="#1a6dbf" stroke-width="1.5" opacity="0.45"/>
-  <line x1="225" y1="295" x2="498" y2="295" stroke="#1a6dbf" stroke-width="1.5" opacity="0.45"/>
-  <line x1="300" y1="175" x2="270" y2="358" stroke="#1a6dbf" stroke-width="1.5" opacity="0.45"/>
-  <line x1="358" y1="175" x2="353" y2="358" stroke="#1a6dbf" stroke-width="1.5" opacity="0.45"/>
-  <line x1="416" y1="175" x2="421" y2="358" stroke="#1a6dbf" stroke-width="1.5" opacity="0.45"/>
-  <circle cx="288" cy="400" r="28" fill="#1a6dbf" stroke="#0a3a80" stroke-width="3"/>
-  <circle cx="288" cy="400" r="12" fill="white"/>
-  <circle cx="438" cy="400" r="28" fill="#1a6dbf" stroke="#0a3a80" stroke-width="3"/>
-  <circle cx="438" cy="400" r="12" fill="white"/>
-  <path d="M356 276 Q338 280 318 276 Q298 270 282 258 Q270 248 268 238 Q272 244 280 252 Q298 264 318 270 Q338 276 356 274" fill="none" stroke="#1a1a1a" stroke-width="1" stroke-linecap="round" opacity="0.9"/>
-  <path d="M356 277 Q336 282 315 278 Q293 272 276 259 Q263 248 261 236 Q265 243 274 251 Q293 265 315 272 Q337 278 356 275" fill="none" stroke="#2a2a2a" stroke-width="0.8" stroke-linecap="round" opacity="0.8"/>
-  <path d="M261 236 Q252 222 248 206 Q246 192 250 184 Q254 178 258 184 Q261 192 260 206 Q259 220 261 236" fill="none" stroke="#1a1a1a" stroke-width="1.1" stroke-linecap="round"/>
-  <path d="M250 184 Q247 178 248 172 Q250 167 253 170 Q255 175 252 182" fill="none" stroke="#1a1a1a" stroke-width="0.6" stroke-linecap="round" opacity="0.7"/>
-  <path d="M360 276 Q378 280 398 276 Q418 270 434 258 Q446 248 448 238 Q444 244 436 252 Q418 264 398 270 Q378 276 360 274" fill="none" stroke="#1a1a1a" stroke-width="1" stroke-linecap="round" opacity="0.9"/>
-  <path d="M360 277 Q380 282 401 278 Q423 272 440 259 Q453 248 455 236 Q451 243 442 251 Q423 265 401 272 Q379 278 360 275" fill="none" stroke="#2a2a2a" stroke-width="0.8" stroke-linecap="round" opacity="0.8"/>
-  <path d="M455 236 Q464 222 468 206 Q470 192 466 184 Q462 178 458 184 Q455 192 456 206 Q457 220 455 236" fill="none" stroke="#1a1a1a" stroke-width="1.1" stroke-linecap="round"/>
-  <path d="M466 184 Q469 178 468 172 Q466 167 463 170 Q461 175 464 182" fill="none" stroke="#1a1a1a" stroke-width="0.6" stroke-linecap="round" opacity="0.7"/>
+const xml = `<svg width="1024" height="1024" viewBox="0 0 520 520" xmlns="http://www.w3.org/2000/svg">
+  <rect width="520" height="520" fill="white"/>
+  <path d="M28 128 Q28 92 68 92 L210 92" fill="none" stroke="#1a6dbf" stroke-width="22" stroke-linecap="round"/>
+  <path d="M42 128 L96 342 Q103 368 132 368 L422 368 Q450 368 457 342 L492 142 Q496 114 468 114 Z" fill="#3a9de0" stroke="#1a6dbf" stroke-width="4"/>
+  <line x1="56" y1="196" x2="484" y2="196" stroke="#1a6dbf" stroke-width="2" opacity="0.4"/>
+  <line x1="72" y1="274" x2="476" y2="274" stroke="#1a6dbf" stroke-width="2" opacity="0.4"/>
+  <line x1="168" y1="116" x2="130" y2="368" stroke="#1a6dbf" stroke-width="2" opacity="0.4"/>
+  <line x1="256" y1="114" x2="250" y2="368" stroke="#1a6dbf" stroke-width="2" opacity="0.4"/>
+  <line x1="344" y1="115" x2="350" y2="368" stroke="#1a6dbf" stroke-width="2" opacity="0.4"/>
+  <circle cx="148" cy="426" r="46" fill="#1a6dbf" stroke="#0a3a80" stroke-width="4.5"/>
+  <circle cx="148" cy="426" r="20" fill="white"/>
+  <circle cx="148" cy="426" r="8" fill="#0a3a80"/>
+  <circle cx="374" cy="426" r="46" fill="#1a6dbf" stroke="#0a3a80" stroke-width="4.5"/>
+  <circle cx="374" cy="426" r="20" fill="white"/>
+  <circle cx="374" cy="426" r="8" fill="#0a3a80"/>
+  <path d="M263 498 Q238 505 210 498 Q178 489 156 471 Q140 457 138 441 Q145 451 158 463 Q182 481 210 489 Q238 496 263 493" fill="none" stroke="#1a1a1a" stroke-width="1.6" stroke-linecap="round" opacity="0.9"/>
+  <path d="M263 499 Q232 510 198 502 Q164 492 142 473 Q127 458 125 440 Q133 451 148 463 Q174 482 202 491 Q233 499 263 495" fill="none" stroke="#111" stroke-width="1.2" stroke-linecap="round" opacity="0.8"/>
+  <path d="M138 441 Q124 420 120 397 Q117 375 123 362 Q130 352 137 362 Q141 375 139 397 Q138 418 138 441" fill="none" stroke="#1a1a1a" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M123 362 Q119 352 121 342 Q123 334 129 338 Q131 346 128 358" fill="none" stroke="#1a1a1a" stroke-width="0.9" stroke-linecap="round"/>
+  <path d="M267 498 Q292 505 320 498 Q352 489 374 471 Q390 457 392 441 Q385 451 372 463 Q348 481 320 489 Q292 496 267 493" fill="none" stroke="#1a1a1a" stroke-width="1.6" stroke-linecap="round" opacity="0.9"/>
+  <path d="M267 499 Q298 510 332 502 Q366 492 388 473 Q403 458 405 440 Q397 451 382 463 Q356 482 328 491 Q297 499 267 495" fill="none" stroke="#111" stroke-width="1.2" stroke-linecap="round" opacity="0.8"/>
+  <path d="M392 441 Q406 420 410 397 Q413 375 407 362 Q400 352 393 362 Q389 375 391 397 Q392 418 392 441" fill="none" stroke="#1a1a1a" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M407 362 Q411 352 409 342 Q407 334 401 338 Q399 346 402 358" fill="none" stroke="#1a1a1a" stroke-width="0.9" stroke-linecap="round"/>
 </svg>`;
 
 interface Props {

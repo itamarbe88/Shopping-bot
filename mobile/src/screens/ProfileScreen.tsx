@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
   name: { fontSize: 20, fontWeight: "700", color: "#1a1a1a", marginBottom: 4 },
   email: { fontSize: 14, color: "#888" },
   cardTitle: { fontSize: 16, fontWeight: "700", color: "#0262A0", marginBottom: 4 },
-  cardSubtitle: { fontSize: 13, color: "#888", marginBottom: 16 },
+  cardSubtitle: { fontSize: 13, color: "#888", marginBottom: 16, textAlign: "center", width: "100%" },
   codeRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   codeText: { fontSize: 28, fontWeight: "800", color: "#0262A0", letterSpacing: 6 },
   copyBtn: { backgroundColor: "#0262A0", paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20 },
