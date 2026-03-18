@@ -2,6 +2,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React from "react";
+import { Ionicons } from "@expo/vector-icons";
 import { ActivityIndicator, I18nManager, Text, View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -78,7 +79,7 @@ function AppTabs() {
         options={{
           title: "סימולציה",
           headerTitle: "סימולציית קנייה",
-          tabBarIcon: () => <Text style={{ fontSize: 22 }}>🔍</Text>,
+          tabBarIcon: () => <Text style={{ fontSize: 22 }}>📊</Text>,
         }}
       />
       <Tab.Screen
@@ -96,7 +97,7 @@ function AppTabs() {
         options={{
           title: "פרופיל",
           headerTitle: "פרופיל",
-          tabBarIcon: () => <Text style={{ fontSize: 22 }}>👤</Text>,
+          tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
         }}
       />
     </Tab.Navigator>

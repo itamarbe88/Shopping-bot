@@ -31,7 +31,6 @@ export default function ProfileScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.header}>
         <CartIcon size={80} />
-        <Text style={styles.appName}>מנהל המכולת</Text>
       </View>
 
       <View style={styles.card}>
@@ -49,7 +48,7 @@ export default function ProfileScreen() {
       {householdId && (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>רשימה משפחתית</Text>
-          <Text style={styles.cardSubtitle}>שתף את הקוד עם בני המשפחה</Text>
+          <Text style={styles.cardSubtitle}>שתפו את הקוד עם בני המשפחה</Text>
           <View style={styles.codeRow}>
             <Text style={styles.codeText}>{householdId}</Text>
             <TouchableOpacity style={[styles.copyBtn, copied && styles.copyBtnDone]} onPress={handleCopy}>

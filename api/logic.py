@@ -252,12 +252,15 @@ def generate_shopping_list(household_id: str, dry_run: bool = False) -> dict:
 
         if current < desired:
             qty_to_buy = int(desired - current)
+            purchase_reason = "shortage"
         elif current == desired and date_arrived:
             qty_to_buy = int(desired)
+            purchase_reason = "overdue"
         elif current > desired and date_arrived:
             qty_to_buy = int(desired - (current - desired))
             if qty_to_buy <= 0:
                 continue
+            purchase_reason = "overdue"
         else:
             continue
 
@@ -268,6 +271,7 @@ def generate_shopping_list(household_id: str, dry_run: bool = False) -> dict:
             "current_quantity": int(current),
             "is_temporary": False,
             "item_type": item_type,
+            "purchase_reason": purchase_reason,
             "last_purchased_date": raw_date if raw_date else None,
         }
         try:
@@ -306,25 +310,6 @@ def confirm_shopping(household_id: str, purchases: list[dict]) -> dict:
                         item["type"] = ""
                     results.append({"item": name, "new_quantity": new_qty, "action": "updated"})
                 break
-    # Apply consumption for overstocked items whose cycle has passed
-    purchased_names = {p["item_name"] for p in purchases}
-    today_date = date.today()
-    for item in items:
-        if item.get("type", "") not in ("", None):
-            continue
-        if item["item_name"] in purchased_names:
-            continue
-        try:
-            current = float(item["current_quantity"])
-            desired = float(item["desired_quantity"])
-            days_cycle = int(item["days_until_restock"])
-            last_date = _parse_date(item["last_purchased_date"])
-        except (ValueError, KeyError):
-            continue
-        if current >= 2 * desired and (last_date + timedelta(days=days_cycle)) <= today_date:
-            item["current_quantity"] = str(int(current - desired))
-            item["last_purchased_date"] = today_date.isoformat()
-
     items = [i for i in items if i.get("type", "") not in {"temporary", "manual"}]
     _save(items, household_id)
     _delete(_last_list_path(household_id))

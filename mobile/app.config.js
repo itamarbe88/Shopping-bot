@@ -18,10 +18,8 @@ module.exports = {
     },
     android: {
       adaptiveIcon: {
-        backgroundColor: "#E6F4FE",
         foregroundImage: "./assets/android-icon-foreground.png",
-        backgroundImage: "./assets/android-icon-background.png",
-        monochromeImage: "./assets/android-icon-monochrome.png",
+        backgroundColor: "#E6F4FE",
       },
       predictiveBackGestureEnabled: false,
       package: "com.itamarbenezra.salvador",

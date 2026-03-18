@@ -44,6 +44,7 @@ export interface ShoppingItem {
   last_purchased_date?: string;
   is_temporary?: boolean;
   item_type?: string;
+  purchase_reason?: string;
 }
 
 export interface ShoppingListResponse {

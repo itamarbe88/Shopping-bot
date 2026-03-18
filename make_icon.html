@@ -1,4 +1,9 @@
-<svg width="1024" height="1024" viewBox="0 0 520 520" xmlns="http://www.w3.org/2000/svg">
+<!DOCTYPE html>
+<html>
+<body>
+<canvas id="c" width="1024" height="1024" style="display:none"></canvas>
+<script>
+const svg = `<svg width="1024" height="1024" viewBox="-130 -60 780 660" xmlns="http://www.w3.org/2000/svg">
   <path d="M28 128 Q28 92 68 92 L210 92" fill="none" stroke="#1a6dbf" stroke-width="22" stroke-linecap="round"/>
   <path d="M42 128 L96 342 Q103 368 132 368 L422 368 Q450 368 457 342 L492 142 Q496 114 468 114 Z" fill="#3a9de0" stroke="#1a6dbf" stroke-width="4"/>
   <line x1="56" y1="196" x2="484" y2="196" stroke="#1a6dbf" stroke-width="2" opacity="0.4"/>
@@ -20,4 +25,21 @@
   <path d="M267 499 Q298 510 332 502 Q366 492 388 473 Q403 458 405 440 Q397 451 382 463 Q356 482 328 491 Q297 499 267 495" fill="none" stroke="#111" stroke-width="1.2" stroke-linecap="round" opacity="0.8"/>
   <path d="M392 441 Q406 420 410 397 Q413 375 407 362 Q400 352 393 362 Q389 375 391 397 Q392 418 392 441" fill="none" stroke="#1a1a1a" stroke-width="1.6" stroke-linecap="round"/>
   <path d="M407 362 Q411 352 409 342 Q407 334 401 338 Q399 346 402 358" fill="none" stroke="#1a1a1a" stroke-width="0.9" stroke-linecap="round"/>
-</svg>
+</svg>`;
+
+const img = new Image();
+const blob = new Blob([svg], {type: 'image/svg+xml'});
+img.onload = () => {
+  const ctx = document.getElementById('c').getContext('2d');
+  ctx.clearRect(0, 0, 1024, 1024);
+  ctx.drawImage(img, 0, 0, 1024, 1024);
+  const a = document.createElement('a');
+  a.download = 'android-icon-foreground.png';
+  a.href = document.getElementById('c').toDataURL('image/png');
+  a.click();
+  document.body.innerHTML = '<h2>Done! android-icon-foreground.png downloaded.</h2>';
+};
+img.src = URL.createObjectURL(blob);
+</script>
+</body>
+</html>

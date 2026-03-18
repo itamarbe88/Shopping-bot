@@ -258,8 +258,8 @@ export default function PurchaseScreen() {
           <View style={[styles.card, row.isExtra && styles.cardExtra, row.item.is_temporary && styles.cardTemp, row.checked && styles.cardDone]}>
             {/* Top label row */}
             <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <Text style={row.item.is_temporary ? styles.tempLabel : styles.itemLabel}>
-                {row.item.is_temporary ? "התווסף ידנית כזמני" : row.isExtra ? "התווסף ידנית מהמלאי" : "אוטומטית עקב חוסרים"}
+              <Text style={row.item.is_temporary ? styles.tempLabel : row.item.purchase_reason === "overdue" ? styles.overdueLabel : styles.itemLabel}>
+                {row.item.is_temporary ? "התווסף ידנית כזמני" : row.isExtra ? "התווסף ידנית מהמלאי" : row.item.purchase_reason === "overdue" ? "לא נרכש זמן רב" : "אוטומטית עקב חוסרים"}
               </Text>
               <View style={styles.left}>
                 {(row.isExtra || row.item.is_temporary) ? (
@@ -306,15 +306,14 @@ export default function PurchaseScreen() {
         )}
       />
 
-      {/* Blue — right side */}
-      <TouchableOpacity style={styles.fabButton} onPress={() => setModalVisible(true)}>
-        <Text style={styles.fabText}>הוסף פריט מהמלאי</Text>
-      </TouchableOpacity>
-
-      {/* Red — left side */}
-      <TouchableOpacity style={styles.fabButtonTemp} onPress={() => setTempModalVisible(true)}>
-        <Text style={styles.fabText}>הוסף פריט זמני</Text>
-      </TouchableOpacity>
+      <View style={styles.fabRow}>
+        <TouchableOpacity style={styles.fabButton} onPress={() => setModalVisible(true)}>
+          <Text style={styles.fabText}>הוסף פריט מהמלאי</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.fabButtonTemp} onPress={() => setTempModalVisible(true)}>
+          <Text style={styles.fabText}>הוסף פריט זמני</Text>
+        </TouchableOpacity>
+      </View>
 
       <View style={styles.footer}>
         <TouchableOpacity style={[styles.btnDone, rows.length === 0 && styles.btnDoneDisabled]} onPress={handleDone} disabled={submitting || rows.length === 0}>
@@ -378,7 +377,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f0f8ff" },
   summaryBar: { backgroundColor: BLUE, paddingVertical: 10, paddingHorizontal: 16, alignItems: "center" },
   summaryText: { color: "#fff", fontSize: 14, fontWeight: "600" },
-  list: { padding: 12, paddingBottom: 160 },
+  list: { padding: 12 },
   card: {
     flexDirection: "row-reverse",
     alignItems: "center",
@@ -406,12 +405,16 @@ const styles = StyleSheet.create({
   extraBadge: { color: BLUE, fontWeight: "700" },
   qtyInput: { width: 34, height: 34, borderWidth: 1, borderColor: "#90caf9", borderRadius: 6, textAlign: "center", fontSize: 13, fontWeight: "900", color: "#1565c0", backgroundColor: "#e3f2fd", marginLeft: 4, paddingVertical: 0 },
   qtyDisabled: { color: "#ccc", borderColor: "#eee", backgroundColor: "#f5f5f5" },
+  fabRow: {
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#f0f8ff",
+  },
   fabButton: {
-    position: "absolute",
-    bottom: 100,
-    left: 12,
+    flex: 1,
     height: 44,
-    width: 160,
     borderRadius: 22,
     backgroundColor: BLUE,
     alignItems: "center",
@@ -423,11 +426,8 @@ const styles = StyleSheet.create({
   },
   fabText: { color: "#fff", fontSize: 14, fontWeight: "700" },
   fabButtonTemp: {
-    position: "absolute",
-    bottom: 100,
-    right: 12,
+    flex: 1,
     height: 44,
-    width: 160,
     borderRadius: 22,
     backgroundColor: "#e53935",
     alignItems: "center",
@@ -438,7 +438,7 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
   },
   cardTemp: { backgroundColor: "#fff0f0" },
-  footer: { position: "absolute", bottom: 0, left: 0, right: 0, flexDirection: "row-reverse", padding: 14, gap: 10, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#e1f5fe", elevation: 8 },
+  footer: { flexDirection: "row-reverse", padding: 14, gap: 10, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#e1f5fe", elevation: 8 },
   btnCancel: { flex: 1, paddingVertical: 14, borderRadius: 10, alignItems: "center", backgroundColor: "#ffebee", borderWidth: 1, borderColor: "#ffcdd2" },
   btnDone: { flex: 2, paddingVertical: 14, borderRadius: 10, alignItems: "center", backgroundColor: BLUE, elevation: 2 },
   btnDoneDisabled: { backgroundColor: "#B0BEC5", elevation: 0 },
@@ -469,7 +469,8 @@ const styles = StyleSheet.create({
   removeBtnText: { color: "#e53935", fontSize: 15, fontWeight: "700" },
   removeBtnDisabled: { color: "#ccc", fontSize: 15, fontWeight: "700" },
   tempLabel: { fontSize: 10, color: "#e53935", fontWeight: "600" },
-  itemLabel: { fontSize: 10, color: BLUE, fontWeight: "600"},
+  itemLabel: { fontSize: 10, color: BLUE, fontWeight: "600" },
+  overdueLabel: { fontSize: 10, color: "#f57c00", fontWeight: "600" },
   noResultsText: { textAlign: "center", color: "#999", fontSize: 14, paddingVertical: 12 },
   selectAllBtn: { marginHorizontal: 12, marginTop: 8, marginBottom: 2, paddingVertical: 8, borderRadius: 10, alignItems: "center" },
   selectAllBtnSelect: { backgroundColor: "#c8f5c8" },
