@@ -105,6 +105,8 @@ def create_household(user_id: str) -> str:
             _write(_inventory_path(household_id), old_csv.read_bytes())
 
     _write(_member_path(user_id), json.dumps({"household_id": household_id}).encode())
+    # Create the household folder placeholder in GCS
+    _write(f"households/{household_id}/", b"")
     return household_id
 
 
