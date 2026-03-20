@@ -45,6 +45,9 @@ module.exports = {
     plugins: ["expo-web-browser"],
     extra: {
       googleWebClientId: process.env.GOOGLE_WEB_CLIENT_ID,
+      eas: {
+        projectId: "f0abd7b9-52fc-4a9a-8181-52c206caf880",
+      },
     },
   },
 };
