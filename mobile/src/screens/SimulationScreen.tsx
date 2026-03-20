@@ -90,9 +90,13 @@ export default function SimulationScreen() {
           </Text>
           <FlatList
             data={[...items].sort((a, b) => {
-              const da = a.next_purchase_date ? new Date(a.next_purchase_date).getTime() : Infinity;
-              const db = b.next_purchase_date ? new Date(b.next_purchase_date).getTime() : Infinity;
-              return da - db;
+              const priority = (item: ShoppingItem) => {
+                if (item.is_temporary) return 0;
+                if (item.item_type === "manual") return 1;
+                if (item.purchase_reason !== "overdue") return 2;
+                return 3;
+              };
+              return priority(a) - priority(b);
             })}
             keyExtractor={(item) => item.item_name}
             renderItem={({ item }) => (

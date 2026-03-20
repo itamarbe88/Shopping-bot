@@ -39,14 +39,20 @@ export default function PurchaseScreen() {
   }, []);
   const routeItems = (route.params as RouteParams | undefined)?.items;
 
+  const rowPriority = (row: PurchaseRow): number => {
+    if (row.item.is_temporary) return 0;
+    if (row.isExtra) return 1;
+    if (row.item.purchase_reason !== "overdue") return 2;
+    return 3;
+  };
+
+  const sortRows = (list: PurchaseRow[]): PurchaseRow[] =>
+    [...list].sort((a, b) =>
+      (a.checked ? 1 : 0) - (b.checked ? 1 : 0) || rowPriority(a) - rowPriority(b)
+    );
+
   const toRows = (list: ShoppingItem[]): PurchaseRow[] =>
-    [...list]
-      .sort((a, b) => {
-        const da = a.next_purchase_date ? new Date(a.next_purchase_date).getTime() : Infinity;
-        const db = b.next_purchase_date ? new Date(b.next_purchase_date).getTime() : Infinity;
-        return da - db;
-      })
-      .map((item) => ({ item, checked: false, qty: String(item.quantity_to_buy), isExtra: item.item_type === "manual" }));
+    sortRows(list.map((item) => ({ item, checked: false, qty: String(item.quantity_to_buy), isExtra: item.item_type === "manual" })));
 
   const [rows, setRows] = useState<PurchaseRow[]>(routeItems ? toRows(routeItems) : []);
   const [hasGenerated, setHasGenerated] = useState(!!routeItems);
@@ -75,7 +81,14 @@ export default function PurchaseScreen() {
   const handleRefresh = useCallback(async () => {
     try {
       const result = await fetchShoppingList(false);
-      setRows(toRows(result.shopping_list));
+      setRows((prev) => {
+        const stateMap = new Map(prev.map((r) => [r.item.item_name, { checked: r.checked, qty: r.qty }]));
+        const merged = result.shopping_list.map((item) => {
+          const saved = stateMap.get(item.item_name);
+          return { item, checked: saved?.checked ?? false, qty: saved?.qty ?? String(item.quantity_to_buy), isExtra: item.item_type === "manual" };
+        });
+        return sortRows(merged);
+      });
     } catch {}
   }, []);
 
@@ -99,7 +112,7 @@ export default function PurchaseScreen() {
   }, [navigation, handleRefresh]);
 
   const toggle = (i: number) =>
-    setRows((prev) => prev.map((r, idx) => idx === i ? { ...r, checked: !r.checked } : r));
+    setRows((prev) => sortRows(prev.map((r, idx) => idx === i ? { ...r, checked: !r.checked } : r)));
 
   const setQty = (i: number, val: string) =>
     setRows((prev) => prev.map((r, idx) => idx === i ? { ...r, qty: val } : r));
@@ -126,7 +139,7 @@ export default function PurchaseScreen() {
     };
     // Save to server
     addManualItem(trimmed, parseFloat(extraQty) || 1).catch(() => {});
-    setRows((prev) => [newRow, ...prev]);
+    setRows((prev) => sortRows([newRow, ...prev]));
     setSearch("");
     setExtraQty("1");
     setModalVisible(false);
@@ -145,20 +158,20 @@ export default function PurchaseScreen() {
     try {
       if (existsInInventory) {
         await addManualItem(name, qty);
-        setRows((prev) => [{
+        setRows((prev) => sortRows([{
           item: { item_name: name, quantity_to_buy: qty, current_quantity: 0, item_type: "manual" },
           checked: false,
           qty: tempQty,
           isExtra: true,
-        }, ...prev]);
+        }, ...prev]));
         Alert.alert("פריט קיים במלאי", `"${name}" קיים במלאי ונוסף כפריט מלאי.`);
       } else {
         await addTemporaryItem(name, qty);
-        setRows((prev) => [{
+        setRows((prev) => sortRows([{
           item: { item_name: name, quantity_to_buy: qty, current_quantity: 0, is_temporary: true },
           checked: false,
           qty: tempQty,
-        }, ...prev]);
+        }, ...prev]));
       }
       setTempName("");
       setTempQty("1");

@@ -3,6 +3,7 @@ import { Alert, Clipboard, Image, ScrollView, StyleSheet, Text, TouchableOpacity
 import CartIcon from "../CartIcon";
 import { fetchHousehold } from "../api";
 import { useAuth } from "../context/AuthContext";
+import { APP_VERSION } from "../version";
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
@@ -61,6 +62,8 @@ export default function ProfileScreen() {
       <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
         <Text style={styles.signOutText}>התנתק</Text>
       </TouchableOpacity>
+
+      <Text style={styles.version}>v{APP_VERSION}</Text>
     </ScrollView>
   );
 }
@@ -95,4 +98,5 @@ const styles = StyleSheet.create({
   copyBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
   signOutBtn: { marginTop: 8, backgroundColor: "#e53935", paddingVertical: 14, paddingHorizontal: 48, borderRadius: 30, elevation: 3 },
   signOutText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  version: { marginTop: 24, fontSize: 12, color: "#aaa" },
 });

@@ -4,9 +4,6 @@ import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import CartIcon from "../CartIcon";
 import { useAuth } from "../context/AuthContext";
 
-const WEB_CLIENT_ID = "49266329932-3kn7a61im5hc7pd9qhcc27hlq1m8bgk3.apps.googleusercontent.com";
-
-GoogleSignin.configure({ webClientId: WEB_CLIENT_ID });
 
 export default function LoginScreen() {
   const { signIn } = useAuth();
