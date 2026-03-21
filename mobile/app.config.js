@@ -42,7 +42,16 @@ module.exports = {
     web: {
       favicon: "./assets/favicon.png",
     },
-    plugins: ["expo-web-browser"],
+    plugins: [
+      "expo-web-browser",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? "./android/app/google-services.json",
+          iosUrlScheme: "com.googleusercontent.apps.49266329932-oo7c9ciqupvjdqui8u23c4920n795brk",
+        },
+      ],
+    ],
     extra: {
       googleWebClientId: process.env.GOOGLE_WEB_CLIENT_ID,
       eas: {
