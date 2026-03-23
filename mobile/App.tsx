@@ -58,6 +58,8 @@ function AppTabs() {
           shadowRadius: 8,
         },
         tabBarLabelStyle: { fontSize: 13, fontWeight: "700" },
+        tabBarActiveBackgroundColor: "rgba(255,255,255,0.18)",
+        tabBarItemStyle: { borderRadius: 12, margin: 4 },
         headerStyle: { backgroundColor: "#0262A0" },
         headerTintColor: "#fff",
         headerTitleStyle: { fontWeight: "700", fontSize: 18 },

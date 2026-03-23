@@ -14,8 +14,10 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { PurchaseItem, ShoppingItem, addManualItem, addTemporaryItem, confirmPurchases, deleteInventoryItem, fetchInventory, fetchShoppingList, removeFromShoppingList } from "../api";
+import { Ionicons } from "@expo/vector-icons";
+import { PurchaseItem, ShoppingItem, VoiceMatchedItem, addManualItem, addTemporaryItem, confirmPurchases, deleteInventoryItem, fetchInventory, fetchShoppingList, processVoiceItems, removeFromShoppingList } from "../api";
 import { getItemIcon } from "../icons";
+import { useVoice } from "../hooks/useVoice";
 
 interface RouteParams { items: ShoppingItem[] }
 
@@ -73,6 +75,59 @@ export default function PurchaseScreen() {
 
   const tempNameRef = useRef<TextInput>(null);
   const extraSearchRef = useRef<TextInput>(null);
+
+  // ── Voice ──────────────────────────────────────────────────────────────────
+  const { isRecording, transcript, error: voiceError, startRecording, stopRecording, cancelRecording } = useVoice();
+  const [voiceModalVisible, setVoiceModalVisible] = useState(false);
+  const [voiceProcessing, setVoiceProcessing] = useState(false);
+  const [voiceResult, setVoiceResult] = useState<{ found: VoiceMatchedItem[]; not_found: string[] } | null>(null);
+  const [addingVoiceItem, setAddingVoiceItem] = useState<string | null>(null);
+
+  const handleMicPress = async () => {
+    if (isRecording) {
+      await stopRecording();
+    } else {
+      setVoiceResult(null);
+      setVoiceModalVisible(true);
+      await startRecording();
+    }
+  };
+
+  const handleVoiceSubmit = async () => {
+    if (!transcript.trim()) return;
+    setVoiceProcessing(true);
+    try {
+      const result = await processVoiceItems(transcript.trim());
+      setVoiceResult(result);
+    } catch {
+      Alert.alert("שגיאה", "לא ניתן לעבד את הדיבור. נסה שוב.");
+    } finally {
+      setVoiceProcessing(false);
+    }
+  };
+
+  const handleAddVoiceItem = async (itemName: string) => {
+    setAddingVoiceItem(itemName);
+    try {
+      await addManualItem(itemName, 1);
+      const newRow: PurchaseRow = {
+        item: { item_name: itemName, quantity_to_buy: 1, current_quantity: 0, item_type: "manual" },
+        checked: false, qty: "1", isExtra: true,
+      };
+      setRows((prev) => sortRows([newRow, ...prev]));
+      setVoiceResult((prev) => prev ? { ...prev, not_found: prev.not_found.filter((n) => n !== itemName) } : prev);
+    } catch {
+      Alert.alert("שגיאה", `לא ניתן להוסיף את "${itemName}"`);
+    } finally {
+      setAddingVoiceItem(null);
+    }
+  };
+
+  const closeVoiceModal = async () => {
+    await cancelRecording();
+    setVoiceModalVisible(false);
+    setVoiceResult(null);
+  };
 
   useEffect(() => {
     fetchInventory().then((inv) => setAllInventoryNames(inv.map((i) => i.item_name)));
@@ -326,6 +381,12 @@ export default function PurchaseScreen() {
         <TouchableOpacity style={styles.fabButtonTemp} onPress={() => setTempModalVisible(true)}>
           <Text style={styles.fabText}>הוסף פריט זמני</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.fabButtonMic, isRecording && styles.fabButtonMicActive]}
+          onPress={handleMicPress}
+        >
+          <Ionicons name={isRecording ? "stop" : "mic"} size={22} color="#fff" />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.footer}>
@@ -333,6 +394,79 @@ export default function PurchaseScreen() {
           <Text style={styles.btnDoneText}>{submitting ? "שומר..." : "סיום קנייה"}</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Voice modal */}
+      <Modal visible={voiceModalVisible} transparent animationType="slide" onRequestClose={closeVoiceModal}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeVoiceModal}>
+          <TouchableOpacity activeOpacity={1} style={[styles.modalBox, { paddingBottom: insets.bottom + 20 }]}>
+            <Text style={styles.modalTitle}>הוספה קולית</Text>
+
+            {!voiceResult && (
+              <>
+                <View style={styles.voiceStatusRow}>
+                  <View style={[styles.voiceDot, isRecording && styles.voiceDotActive]} />
+                  <Text style={styles.voiceStatusText}>
+                    {isRecording ? "מקשיב..." : voiceProcessing ? "מעבד..." : "לחץ להקלטה"}
+                  </Text>
+                </View>
+                {transcript.length > 0 && <Text style={styles.voiceTranscript}>{transcript}</Text>}
+                {voiceError && <Text style={[styles.voiceTranscript, { color: "#c62828" }]}>{voiceError}</Text>}
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {!isRecording && transcript.length > 0 && (
+                    <TouchableOpacity style={[styles.modalAddBtn, { flex: 1 }]} onPress={handleVoiceSubmit} disabled={voiceProcessing}>
+                      <Text style={styles.modalAddBtnText}>{voiceProcessing ? "מעבד..." : "חפש ברשימה"}</Text>
+                    </TouchableOpacity>
+                  )}
+                  {isRecording ? (
+                    <TouchableOpacity style={[styles.modalAddBtn, { flex: 1, backgroundColor: "#e53935" }]} onPress={stopRecording}>
+                      <Text style={styles.modalAddBtnText}>עצור</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity style={[styles.modalCancelBtn, { flex: 1 }]} onPress={closeVoiceModal}>
+                      <Text style={styles.modalCancelText}>ביטול</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </>
+            )}
+
+            {voiceResult && (
+              <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+                {voiceResult.found.length > 0 && (
+                  <>
+                    <Text style={styles.voiceSectionTitle}>✅ נמצאו ({voiceResult.found.length})</Text>
+                    {voiceResult.found.map((item) => (
+                      <View key={item.matched} style={styles.voiceResultRow}>
+                        <Text style={styles.voiceResultName}>{item.matched} {getItemIcon(item.matched)}</Text>
+                        <Text style={styles.voiceResultDetail}>יש: {item.current_quantity} / רצוי: {item.desired_quantity}</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+                {voiceResult.not_found.length > 0 && (
+                  <>
+                    <Text style={[styles.voiceSectionTitle, { color: "#e65100" }]}>❓ לא נמצאו ({voiceResult.not_found.length})</Text>
+                    {voiceResult.not_found.map((name) => (
+                      <View key={name} style={styles.voiceResultRow}>
+                        <Text style={[styles.voiceResultName, { flex: 1 }]}>{name}</Text>
+                        <TouchableOpacity style={styles.voiceAddBtn} onPress={() => handleAddVoiceItem(name)} disabled={addingVoiceItem === name}>
+                          <Text style={styles.voiceAddBtnText}>{addingVoiceItem === name ? "מוסיף..." : "+ הוסף"}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </>
+                )}
+                {voiceResult.found.length === 0 && voiceResult.not_found.length === 0 && (
+                  <Text style={styles.voiceStatusText}>לא זוהו פריטים. נסה שוב.</Text>
+                )}
+                <TouchableOpacity style={[styles.modalCancelBtn, { marginTop: 12 }]} onPress={closeVoiceModal}>
+                  <Text style={styles.modalCancelText}>סגור</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Temp item modal */}
       <Modal visible={tempModalVisible} transparent animationType="slide" onRequestClose={() => setTempModalVisible(false)} onShow={() => tempNameRef.current?.focus()}>
@@ -450,6 +584,30 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 6,
   },
+  fabButtonMic: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: BLUE,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 6,
+    shadowColor: BLUE,
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+  },
+  fabButtonMicActive: { backgroundColor: "#e53935", shadowColor: "#e53935" },
+  voiceStatusRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 12 },
+  voiceDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: "#ccc", marginRight: 8 },
+  voiceDotActive: { backgroundColor: "#e53935" },
+  voiceStatusText: { fontSize: 16, color: "#555", textAlign: "center" },
+  voiceTranscript: { fontSize: 15, color: "#333", textAlign: "right", backgroundColor: "#f8fbff", borderRadius: 8, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: "#e3f2fd" },
+  voiceSectionTitle: { fontSize: 14, fontWeight: "700", color: "#1a7a1a", marginTop: 12, marginBottom: 6 },
+  voiceResultRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: "#f0f0f0" },
+  voiceResultName: { fontSize: 15, fontWeight: "600", color: "#1a1a1a" },
+  voiceResultDetail: { fontSize: 13, color: "#888" },
+  voiceAddBtn: { backgroundColor: BLUE, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  voiceAddBtnText: { color: "#fff", fontSize: 13, fontWeight: "700" },
   cardTemp: { backgroundColor: "#fff0f0" },
   footer: { flexDirection: "row-reverse", padding: 14, gap: 10, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#e1f5fe", elevation: 8 },
   btnCancel: { flex: 1, paddingVertical: 14, borderRadius: 10, alignItems: "center", backgroundColor: "#ffebee", borderWidth: 1, borderColor: "#ffcdd2" },
