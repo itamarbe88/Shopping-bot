@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "49266329932-oo7c9ciqupvjdqui8u23c4920n795brk.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.itamarbenezra.salvador",
+            "certificate_hash": "acdeb5ffd1e3307c0bc31042a47af00507911c31"
+          }
+        },
+        {
           "client_id": "49266329932-3kn7a61im5hc7pd9qhcc27hlq1m8bgk3.apps.googleusercontent.com",
           "client_type": 3
         }
