@@ -77,6 +77,10 @@ export function useVoice({
 
   const startRecording = async () => {
     try {
+      if (!Voice) {
+        setError("מודול הקול אינו זמין — נסה לבנות מחדש את האפליקציה");
+        return;
+      }
       setTranscript("");
       setError(null);
       const hasPermission = await requestMicPermission();

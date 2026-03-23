@@ -3,7 +3,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { ActivityIndicator, I18nManager, Text, View } from "react-native";
+import { ActivityIndicator, I18nManager, View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import HouseholdScreen from "./src/screens/HouseholdScreen";
@@ -58,8 +58,6 @@ function AppTabs() {
           shadowRadius: 8,
         },
         tabBarLabelStyle: { fontSize: 13, fontWeight: "700" },
-        tabBarActiveBackgroundColor: "rgba(255,255,255,0.18)",
-        tabBarItemStyle: { borderRadius: 12, margin: 4 },
         headerStyle: { backgroundColor: "#0262A0" },
         headerTintColor: "#fff",
         headerTitleStyle: { fontWeight: "700", fontSize: 18 },
@@ -72,7 +70,9 @@ function AppTabs() {
         options={{
           title: "קניות",
           headerShown: false,
-          tabBarIcon: () => <Text style={{ fontSize: 22 }}>🛒</Text>,
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? "cart" : "cart-outline"} size={size} color={color} />
+          ),
         }}
       />
       <Tab.Screen
@@ -81,7 +81,9 @@ function AppTabs() {
         options={{
           title: "סימולציה",
           headerTitle: "סימולציית קנייה",
-          tabBarIcon: () => <Text style={{ fontSize: 22 }}>📊</Text>,
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? "bar-chart" : "bar-chart-outline"} size={size} color={color} />
+          ),
         }}
       />
       <Tab.Screen
@@ -90,7 +92,9 @@ function AppTabs() {
         options={{
           title: "מלאי",
           headerTitle: "מלאי הבית",
-          tabBarIcon: () => <Text style={{ fontSize: 22 }}>📦</Text>,
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? "cube" : "cube-outline"} size={size} color={color} />
+          ),
         }}
       />
       <Tab.Screen
@@ -99,7 +103,9 @@ function AppTabs() {
         options={{
           title: "פרופיל",
           headerTitle: "פרופיל",
-          tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? "person" : "person-outline"} size={size} color={color} />
+          ),
         }}
       />
     </Tab.Navigator>
