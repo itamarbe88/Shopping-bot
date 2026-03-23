@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "49266329932",
+    "project_id": "project-ba84fdc4-ae52-4acd-b99",
+    "storage_bucket": "project-ba84fdc4-ae52-4acd-b99.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:49266329932:android:9262b016cf6b8ede9267e9",
+        "android_client_info": {
+          "package_name": "com.itamarbenezra.salvador"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "49266329932-3kn7a61im5hc7pd9qhcc27hlq1m8bgk3.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBEQWwX90GsiclddfuuE6S0EG7wZ6Y6u0o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "49266329932-3kn7a61im5hc7pd9qhcc27hlq1m8bgk3.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

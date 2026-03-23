@@ -7,6 +7,7 @@ import {
   Keyboard,
   Modal,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,8 +15,17 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { InventoryItem, fetchInventory, deleteInventoryItem, upsertInventoryItem } from "../api";
+import {
+  InventoryItem,
+  VoiceMatchedItem,
+  fetchInventory,
+  deleteInventoryItem,
+  upsertInventoryItem,
+  addManualItem,
+  processVoiceItems,
+} from "../api";
 import { getItemIcon } from "../icons";
+import { useVoice } from "../hooks/useVoice";
 
 const BLUE = "#0288D1";
 
@@ -43,6 +53,57 @@ export default function InventoryScreen() {
   const [newDays, setNewDays] = useState("");
   const [newDate, setNewDate] = useState("");
   const [adding, setAdding] = useState(false);
+
+  // ── Voice ──────────────────────────────────────────────────────────────────
+  const { isRecording, transcript, error: voiceError, startRecording, stopRecording, cancelRecording } = useVoice();
+  const [voiceModalVisible, setVoiceModalVisible] = useState(false);
+  const [voiceProcessing, setVoiceProcessing] = useState(false);
+  const [voiceResult, setVoiceResult] = useState<{ found: VoiceMatchedItem[]; not_found: string[] } | null>(null);
+  const [addingVoiceItem, setAddingVoiceItem] = useState<string | null>(null);
+
+  const handleMicPress = async () => {
+    if (isRecording) {
+      await stopRecording();
+    } else {
+      setVoiceResult(null);
+      setVoiceModalVisible(true);
+      await startRecording();
+    }
+  };
+
+  const handleVoiceSubmit = async () => {
+    if (!transcript.trim()) return;
+    setVoiceProcessing(true);
+    try {
+      const result = await processVoiceItems(transcript.trim());
+      setVoiceResult(result);
+    } catch {
+      Alert.alert("שגיאה", "לא ניתן לעבד את הדיבור. נסה שוב.");
+    } finally {
+      setVoiceProcessing(false);
+    }
+  };
+
+  const handleAddVoiceItem = async (itemName: string) => {
+    setAddingVoiceItem(itemName);
+    try {
+      await addManualItem(itemName, 1);
+      setVoiceResult((prev) =>
+        prev ? { ...prev, not_found: prev.not_found.filter((n) => n !== itemName) } : prev
+      );
+      load();
+    } catch {
+      Alert.alert("שגיאה", `לא ניתן להוסיף את "${itemName}"`);
+    } finally {
+      setAddingVoiceItem(null);
+    }
+  };
+
+  const closeVoiceModal = async () => {
+    await cancelRecording();
+    setVoiceModalVisible(false);
+    setVoiceResult(null);
+  };
 
   useEffect(() => {
     const show = Keyboard.addListener("keyboardDidShow", (e) => setKeyboardOffset(e.endCoordinates.height));
@@ -354,9 +415,15 @@ export default function InventoryScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
       />
 
-      {/* FAB */}
+      {/* FAB row */}
       <TouchableOpacity style={styles.fab} onPress={openAdd}>
         <Text style={styles.fabText}>+</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.fab, styles.fabMic, isRecording && styles.fabMicActive]}
+        onPress={handleMicPress}
+      >
+        <Text style={styles.fabText}>{isRecording ? "⏹" : "🎤"}</Text>
       </TouchableOpacity>
 
       {/* Add modal */}
@@ -393,6 +460,108 @@ export default function InventoryScreen() {
                 <Text style={styles.cancelBtnText}>ביטול</Text>
               </TouchableOpacity>
             </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Voice modal */}
+      <Modal visible={voiceModalVisible} transparent animationType="slide" onRequestClose={closeVoiceModal}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeVoiceModal}>
+          <TouchableOpacity activeOpacity={1} style={[styles.modalBox, { paddingBottom: insets.bottom + 20 }]}>
+            <Text style={styles.modalTitle}>הוספה קולית</Text>
+
+            {/* Recording status */}
+            {!voiceResult && (
+              <>
+                <View style={styles.voiceStatusRow}>
+                  <View style={[styles.voiceDot, isRecording && styles.voiceDotActive]} />
+                  <Text style={styles.voiceStatus}>
+                    {isRecording ? "מקשיב..." : voiceProcessing ? "מעבד..." : "לחץ להקלטה"}
+                  </Text>
+                </View>
+
+                {transcript.length > 0 && (
+                  <Text style={styles.voiceTranscript}>{transcript}</Text>
+                )}
+
+                {voiceError && (
+                  <Text style={[styles.voiceTranscript, { color: "#c62828" }]}>{voiceError}</Text>
+                )}
+
+                <View style={styles.bottomBtnRow}>
+                  {!isRecording && transcript.length > 0 && (
+                    <TouchableOpacity
+                      style={[styles.saveBtn, { flex: 1 }]}
+                      onPress={handleVoiceSubmit}
+                      disabled={voiceProcessing}
+                    >
+                      <Text style={styles.saveBtnText}>{voiceProcessing ? "מעבד..." : "חפש במלאי"}</Text>
+                    </TouchableOpacity>
+                  )}
+                  {isRecording ? (
+                    <TouchableOpacity style={[styles.saveBtn, { flex: 1, backgroundColor: "#e53935" }]} onPress={stopRecording}>
+                      <Text style={styles.saveBtnText}>עצור</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity style={[styles.cancelBtn, { flex: 1, marginBottom: 0 }]} onPress={closeVoiceModal}>
+                      <Text style={styles.cancelBtnText}>ביטול</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </>
+            )}
+
+            {/* Results */}
+            {voiceResult && (
+              <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+                {voiceResult.found.length > 0 && (
+                  <>
+                    <Text style={styles.voiceSectionTitle}>✅ נמצאו במלאי ({voiceResult.found.length})</Text>
+                    {voiceResult.found.map((item) => (
+                      <View key={item.matched} style={styles.voiceResultRow}>
+                        <Text style={styles.voiceResultName}>{item.matched} {getItemIcon(item.matched)}</Text>
+                        <Text style={styles.voiceResultDetail}>
+                          יש: {item.current_quantity} / רצוי: {item.desired_quantity}
+                        </Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+
+                {voiceResult.not_found.length > 0 && (
+                  <>
+                    <Text style={[styles.voiceSectionTitle, { color: "#e65100" }]}>
+                      ❓ לא נמצאו ({voiceResult.not_found.length})
+                    </Text>
+                    {voiceResult.not_found.map((name) => (
+                      <View key={name} style={styles.voiceResultRow}>
+                        <Text style={[styles.voiceResultName, { flex: 1 }]}>{name}</Text>
+                        <TouchableOpacity
+                          style={styles.voiceAddBtn}
+                          onPress={() => handleAddVoiceItem(name)}
+                          disabled={addingVoiceItem === name}
+                        >
+                          <Text style={styles.voiceAddBtnText}>
+                            {addingVoiceItem === name ? "מוסיף..." : "+ הוסף"}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </>
+                )}
+
+                {voiceResult.found.length === 0 && voiceResult.not_found.length === 0 && (
+                  <Text style={styles.voiceStatus}>לא זוהו פריטים. נסה שוב.</Text>
+                )}
+
+                <TouchableOpacity
+                  style={[styles.cancelBtn, { marginTop: 12, marginBottom: 0 }]}
+                  onPress={closeVoiceModal}
+                >
+                  <Text style={styles.cancelBtnText}>סגור</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            )}
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
@@ -507,6 +676,20 @@ const styles = StyleSheet.create({
   cancelBtn: { paddingVertical: 12, borderRadius: 10, alignItems: "center", backgroundColor: "#ffebee", borderWidth: 1, borderColor: "#ffcdd2" },
   cancelBtnText: { color: "#c62828", fontSize: 15, fontWeight: "600" },
   fab: { position: "absolute", bottom: 24, left: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: BLUE, alignItems: "center", justifyContent: "center", elevation: 8, shadowColor: BLUE, shadowOpacity: 0.4, shadowRadius: 8 },
-  fabText: { color: "#fff", fontSize: 32, lineHeight: 36, fontWeight: "300" },
+  fabMic: { left: 88 },
+  fabMicActive: { backgroundColor: "#e53935", shadowColor: "#e53935" },
+  fabText: { color: "#fff", fontSize: 28, lineHeight: 34, fontWeight: "300" },
   required: { color: "#e53935" },
+  // Voice modal
+  voiceStatusRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 12 },
+  voiceDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: "#ccc", marginRight: 8 },
+  voiceDotActive: { backgroundColor: "#e53935" },
+  voiceStatus: { fontSize: 16, color: "#555", textAlign: "center" },
+  voiceTranscript: { fontSize: 15, color: "#333", textAlign: "right", backgroundColor: "#f8fbff", borderRadius: 8, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: "#e3f2fd" },
+  voiceSectionTitle: { fontSize: 14, fontWeight: "700", color: "#1a7a1a", marginTop: 12, marginBottom: 6 },
+  voiceResultRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: "#f0f0f0" },
+  voiceResultName: { fontSize: 15, fontWeight: "600", color: "#1a1a1a" },
+  voiceResultDetail: { fontSize: 13, color: "#888" },
+  voiceAddBtn: { backgroundColor: BLUE, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  voiceAddBtnText: { color: "#fff", fontSize: 13, fontWeight: "700" },
 });

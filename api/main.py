@@ -21,6 +21,7 @@ from api.logic import (
     get_household_id,
     get_inventory,
     join_household,
+    process_voice_items,
     read_last_list,
     upsert_item,
     write_last_list,
@@ -210,6 +211,15 @@ def add_temporary_item(body: TempItemRequest, hh: str = Depends(get_hh_id)):
     })
     _save(items, hh)
     return {"success": True, "item": body.item_name, "quantity": body.quantity}
+
+
+class VoiceRequest(BaseModel):
+    speech_text: str
+
+
+@app.post("/inventory/voice")
+def voice_inventory(body: VoiceRequest, hh: str = Depends(get_hh_id)):
+    return process_voice_items(hh, body.speech_text)
 
 
 @app.post("/inventory/manual")

@@ -333,3 +333,67 @@ def write_last_list(household_id: str, items: list) -> None:
 
 def delete_last_list(household_id: str) -> None:
     _delete(_last_list_path(household_id))
+
+
+# ── Voice inventory ─────────────────────────────────────────────────────────────
+
+import anthropic as _anthropic
+
+def process_voice_items(household_id: str, speech_text: str) -> dict:
+    """
+    Parse Hebrew speech text into grocery items via Claude,
+    then match each item against the inventory using contains matching.
+    """
+    client = _anthropic.Anthropic()
+
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=512,
+        messages=[{
+            "role": "user",
+            "content": (
+                "Extract grocery item names from the following Hebrew speech.\n"
+                "Return ONLY a JSON array of Hebrew item names, no explanation.\n"
+                'Example: ["חלב", "לחם", "ביצים"]\n\n'
+                f"Speech: {speech_text}"
+            ),
+        }],
+    )
+
+    raw = message.content[0].text.strip()
+    try:
+        start = raw.find("[")
+        end = raw.rfind("]") + 1
+        parsed_items: list[str] = json.loads(raw[start:end]) if start >= 0 and end > start else []
+    except (json.JSONDecodeError, ValueError):
+        parsed_items = []
+
+    inventory = _load(household_id)
+
+    found = []
+    not_found = []
+
+    for spoken in parsed_items:
+        spoken_clean = spoken.strip()
+        # Contains matching in both directions (e.g. "חלב" matches "חלב 3%" and vice versa)
+        matches = [
+            inv for inv in inventory
+            if spoken_clean in inv["item_name"] or inv["item_name"] in spoken_clean
+        ]
+        if matches:
+            best = min(matches, key=lambda x: abs(len(x["item_name"]) - len(spoken_clean)))
+            found.append({
+                "spoken": spoken_clean,
+                "matched": best["item_name"],
+                "current_quantity": best.get("current_quantity", "0"),
+                "desired_quantity": best.get("desired_quantity", "1"),
+            })
+        else:
+            not_found.append(spoken_clean)
+
+    return {
+        "found": found,
+        "not_found": not_found,
+        "raw_text": speech_text,
+        "parsed_items": parsed_items,
+    }

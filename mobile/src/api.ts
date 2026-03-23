@@ -128,6 +128,30 @@ export async function upsertInventoryItem(item: {
   if (!res.ok) throw new Error("Failed to save inventory item");
 }
 
+export interface VoiceMatchedItem {
+  spoken: string;
+  matched: string;
+  current_quantity: string;
+  desired_quantity: string;
+}
+
+export interface VoiceResponse {
+  found: VoiceMatchedItem[];
+  not_found: string[];
+  raw_text: string;
+  parsed_items: string[];
+}
+
+export async function processVoiceItems(speech_text: string): Promise<VoiceResponse> {
+  const res = await apiFetch(`${BASE_URL}/inventory/voice`, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify({ speech_text }),
+  });
+  if (!res.ok) throw new Error("Failed to process voice input");
+  return res.json();
+}
+
 export async function deleteInventoryItem(item_name: string, type?: string): Promise<void> {
   const url = type
     ? `${BASE_URL}/inventory/item/${encodeURIComponent(item_name)}?item_type=${encodeURIComponent(type)}`
