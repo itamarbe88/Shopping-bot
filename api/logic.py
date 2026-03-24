@@ -91,6 +91,10 @@ def save_item_image(household_id: str, item_name: str, image_bytes: bytes) -> No
     _write(_image_path(household_id, item_name), image_bytes)
 
 
+def delete_item_image(household_id: str, item_name: str) -> None:
+    _delete(_image_path(household_id, item_name))
+
+
 def get_item_image(household_id: str, item_name: str) -> bytes | None:
     return _read(_image_path(household_id, item_name))
 

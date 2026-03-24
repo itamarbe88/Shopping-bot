@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import { Ionicons } from "@expo/vector-icons";
-import { InventoryItem, fetchInventory, deleteInventoryItem, upsertInventoryItem, uploadItemImage, fetchItemImage } from "../api";
+import { InventoryItem, fetchInventory, deleteInventoryItem, upsertInventoryItem, uploadItemImage, fetchItemImage, deleteItemImage, fetchItemsWithImages } from "../api";
 import { getItemIcon } from "../icons";
 
 const BLUE = "#0288D1";
@@ -50,7 +50,9 @@ export default function InventoryScreen() {
 
   const [addImageBase64, setAddImageBase64] = useState<string | null>(null);
   const [editImageBase64, setEditImageBase64] = useState<string | null>(null);
+  const [removeEditImage, setRemoveEditImage] = useState(false);
   const [viewImageBase64, setViewImageBase64] = useState<string | null>(null);
+  const [itemsWithImages, setItemsWithImages] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const show = Keyboard.addListener("keyboardDidShow", (e) => setKeyboardOffset(e.endCoordinates.height));
@@ -84,6 +86,7 @@ export default function InventoryScreen() {
       setError(null);
       const data = await fetchInventory();
       setItems(data);
+      fetchItemsWithImages().then((names) => setItemsWithImages(new Set(names))).catch(() => {});
     } catch {
       setError("לא ניתן להתחבר לשרת. האם הוא פועל?");
     } finally {
@@ -143,6 +146,7 @@ export default function InventoryScreen() {
     setEditDays(item.days_until_restock);
     setEditDate(item.last_purchased_date);
     setEditImageBase64(null);
+    setRemoveEditImage(false);
     fetchItemImage(item.item_name).then(setEditImageBase64).catch(() => {});
   };
 
@@ -181,8 +185,12 @@ export default function InventoryScreen() {
         days_until_restock: parseInt(editDays) || 7,
         last_purchased_date: editDate || undefined,
       });
-      if (editImageBase64) {
+      if (removeEditImage && editItem) {
+        await deleteItemImage(editItem.item_name);
+        setItemsWithImages((prev) => { const s = new Set(prev); s.delete(editItem.item_name); return s; });
+      } else if (editImageBase64) {
         await uploadItemImage(editName.trim(), editImageBase64);
+        setItemsWithImages((prev) => new Set([...prev, editName.trim()]));
       }
       setEditItem(null);
       load();
@@ -268,6 +276,7 @@ export default function InventoryScreen() {
       });
       if (addImageBase64) {
         await uploadItemImage(newName.trim(), addImageBase64);
+        setItemsWithImages((prev) => new Set([...prev, newName.trim()]));
       }
       setAddVisible(false);
       load();
@@ -359,6 +368,15 @@ export default function InventoryScreen() {
         <View style={[styles.card, isManual ? styles.cardManual : needsRestock ? styles.cardAlert : isOverdue && styles.cardOverdue]}>
           <View style={styles.row}>
             {highlightName(item.item_name)}
+            {itemsWithImages.has(item.item_name) && (
+              <TouchableOpacity
+                onPress={(e) => { e.stopPropagation(); fetchItemImage(item.item_name).then(setViewImageBase64).catch(() => {}); }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={{ marginRight: 4 }}
+              >
+                <Ionicons name="image-outline" size={18} color="#888" />
+              </TouchableOpacity>
+            )}
             <View style={[styles.badge, isManual ? styles.badgeManual : needsRestock ? styles.badgeAlert : isOverdue ? styles.badgeOverdue : styles.badgeOk]}>
               <Text style={[styles.badgeText, isManual ? styles.badgeTextManual : needsRestock ? styles.badgeTextAlert : isOverdue ? styles.badgeTextOverdue : styles.badgeTextOk]}>
                 {isManual ? "נוסף ידנית לרשימה" : needsRestock ? "נדרשת רכישה" : isOverdue ? "לא נרכש זמן רב" : "תקין"}
@@ -455,6 +473,11 @@ export default function InventoryScreen() {
               <TouchableOpacity style={styles.cameraBtn} onPress={() => pickImage(setAddImageBase64)}>
                 <Ionicons name={addImageBase64 ? "camera" : "camera-outline"} size={22} color="#555" />
               </TouchableOpacity>
+              {addImageBase64 ? (
+                <TouchableOpacity style={[styles.cameraBtn, { borderColor: "#ffcdd2" }]} onPress={() => setAddImageBase64(null)}>
+                  <Ionicons name="trash-outline" size={22} color="#e53935" />
+                </TouchableOpacity>
+              ) : null}
             </View>
 
             <View style={styles.bottomBtnRow}>
@@ -466,6 +489,15 @@ export default function InventoryScreen() {
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Full-screen image viewer */}
+      <Modal visible={!!viewImageBase64} transparent animationType="fade" onRequestClose={() => setViewImageBase64(null)}>
+        <TouchableOpacity style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.9)", justifyContent: "center", alignItems: "center" }} activeOpacity={1} onPress={() => setViewImageBase64(null)}>
+          {viewImageBase64 && (
+            <Image source={{ uri: `data:image/jpeg;base64,${viewImageBase64}` }} style={{ width: "90%", height: "70%", resizeMode: "contain" }} />
+          )}
         </TouchableOpacity>
       </Modal>
 
@@ -500,11 +532,18 @@ export default function InventoryScreen() {
 
             <View style={styles.imageRow}>
               {editImageBase64 ? (
-                <Image source={{ uri: `data:image/jpeg;base64,${editImageBase64}` }} style={styles.imagePreview} />
+                <TouchableOpacity onPress={() => setViewImageBase64(editImageBase64)}>
+                  <Image source={{ uri: `data:image/jpeg;base64,${editImageBase64}` }} style={styles.imagePreview} />
+                </TouchableOpacity>
               ) : null}
-              <TouchableOpacity style={styles.cameraBtn} onPress={() => pickImage(setEditImageBase64)}>
+              <TouchableOpacity style={styles.cameraBtn} onPress={() => pickImage((b64) => { setEditImageBase64(b64); setRemoveEditImage(false); })}>
                 <Ionicons name={editImageBase64 ? "camera" : "camera-outline"} size={22} color="#555" />
               </TouchableOpacity>
+              {editImageBase64 ? (
+                <TouchableOpacity style={[styles.cameraBtn, { borderColor: "#ffcdd2" }]} onPress={() => { setEditImageBase64(null); setRemoveEditImage(true); }}>
+                  <Ionicons name="trash-outline" size={22} color="#e53935" />
+                </TouchableOpacity>
+              ) : null}
             </View>
 
             <View style={styles.bottomBtnRow}>

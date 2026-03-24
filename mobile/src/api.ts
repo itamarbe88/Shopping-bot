@@ -190,6 +190,14 @@ export async function checkItemHasImage(item_name: string): Promise<boolean> {
   return data.exists;
 }
 
+export async function deleteItemImage(item_name: string): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/inventory/image/${encodeURIComponent(item_name)}`, {
+    method: "DELETE",
+    headers: await authHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to delete image");
+}
+
 export async function fetchItemsWithImages(): Promise<string[]> {
   const res = await apiFetch(`${BASE_URL}/inventory/images`, { headers: await authHeaders() });
   if (!res.ok) return [];

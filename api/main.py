@@ -16,6 +16,7 @@ from api.logic import (
     confirm_shopping,
     create_household,
     delete_item,
+    delete_item_image,
     delete_last_list,
     generate_shopping_list,
     get_household_id,
@@ -241,6 +242,11 @@ def download_item_image(item_name: str, hh: str = Depends(get_hh_id)):
     if data is None:
         raise HTTPException(status_code=404, detail="No image for this item")
     return {"image_base64": base64.b64encode(data).decode()}
+
+@app.delete("/inventory/image/{item_name}")
+def remove_item_image(item_name: str, hh: str = Depends(get_hh_id)):
+    delete_item_image(hh, item_name)
+    return {"success": True}
 
 @app.get("/inventory/image-exists/{item_name}")
 def check_item_image(item_name: str, hh: str = Depends(get_hh_id)):
