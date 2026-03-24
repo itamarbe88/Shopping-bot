@@ -42,6 +42,11 @@ export function useVoice({
   minConfidenceRef.current = minConfidence;
 
   useEffect(() => {
+    if (!Voice) {
+      setError("מודול הקול אינו זמין — נסה לבנות מחדש את האפליקציה");
+      return;
+    }
+
     Voice.onSpeechResults = (e: SpeechResultsEvent) => {
       const results = e.value ?? [];
       if (results.length > 0) {
