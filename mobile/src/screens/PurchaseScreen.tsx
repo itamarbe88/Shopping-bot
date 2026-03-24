@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   Keyboard,
   Modal,
   ScrollView,
@@ -15,7 +16,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { PurchaseItem, ShoppingItem, VoiceMatchedItem, addManualItem, addTemporaryItem, confirmPurchases, deleteInventoryItem, fetchInventory, fetchShoppingList, processVoiceItems, removeFromShoppingList } from "../api";
+import { PurchaseItem, ShoppingItem, VoiceMatchedItem, addManualItem, addTemporaryItem, confirmPurchases, deleteInventoryItem, fetchInventory, fetchItemImage, fetchItemsWithImages, fetchShoppingList, processVoiceItems, removeFromShoppingList } from "../api";
 import { getItemIcon } from "../icons";
 import { useVoice } from "../hooks/useVoice";
 
@@ -81,7 +82,18 @@ export default function PurchaseScreen() {
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
   const [voiceProcessing, setVoiceProcessing] = useState(false);
   const [voiceResult, setVoiceResult] = useState<{ found: VoiceMatchedItem[]; not_found: string[] } | null>(null);
-  const [addingVoiceItem, setAddingVoiceItem] = useState<string | null>(null);
+  const [checkedNotFound, setCheckedNotFound] = useState<Set<string>>(new Set());
+
+  // ── Item images ────────────────────────────────────────────────────────────
+  const [itemsWithImages, setItemsWithImages] = useState<Set<string>>(new Set());
+  const [viewImage, setViewImage] = useState<string | null>(null);
+
+  const handleViewImage = async (item_name: string) => {
+    try {
+      const base64 = await fetchItemImage(item_name);
+      if (base64) setViewImage(base64);
+    } catch {}
+  };
 
   const handleMicPress = async () => {
     if (isRecording) {
@@ -99,27 +111,11 @@ export default function PurchaseScreen() {
     try {
       const result = await processVoiceItems(transcript.trim());
       setVoiceResult(result);
+      setCheckedNotFound(new Set(result.not_found));
     } catch {
       Alert.alert("שגיאה", "לא ניתן לעבד את הדיבור. נסה שוב.");
     } finally {
       setVoiceProcessing(false);
-    }
-  };
-
-  const handleAddVoiceItem = async (itemName: string) => {
-    setAddingVoiceItem(itemName);
-    try {
-      await addManualItem(itemName, 1);
-      const newRow: PurchaseRow = {
-        item: { item_name: itemName, quantity_to_buy: 1, current_quantity: 0, item_type: "manual" },
-        checked: false, qty: "1", isExtra: true,
-      };
-      setRows((prev) => sortRows([newRow, ...prev]));
-      setVoiceResult((prev) => prev ? { ...prev, not_found: prev.not_found.filter((n) => n !== itemName) } : prev);
-    } catch {
-      Alert.alert("שגיאה", `לא ניתן להוסיף את "${itemName}"`);
-    } finally {
-      setAddingVoiceItem(null);
     }
   };
 
@@ -129,8 +125,62 @@ export default function PurchaseScreen() {
     setVoiceResult(null);
   };
 
+  const handleAddAllFound = async () => {
+    if (!voiceResult) return;
+
+    const existingNames = new Set(rows.map((r) => r.item.item_name));
+
+    // Found items — same logic as הוסף פריט מלאי button
+    for (const item of voiceResult.found) {
+      if (existingNames.has(item.matched)) continue;
+      try {
+        await addManualItem(item.matched, 1);
+        const newRow: PurchaseRow = {
+          item: { item_name: item.matched, quantity_to_buy: 1, current_quantity: 0, item_type: "manual" },
+          checked: false, qty: "1", isExtra: true,
+        };
+        setRows((prev) => sortRows([newRow, ...prev]));
+      } catch {
+        Alert.alert("שגיאה", `לא ניתן להוסיף את "${item.matched}"`);
+      }
+    }
+
+    // Not-found checked items — add to inventory as temporary then add to rows
+    for (const name of checkedNotFound) {
+      if (existingNames.has(name)) continue;
+      try {
+        await addTemporaryItem(name, 1);
+        const newRow: PurchaseRow = {
+          item: { item_name: name, quantity_to_buy: 1, current_quantity: 0, is_temporary: true, item_type: "temporary" },
+          checked: false, qty: "1", isExtra: false,
+        };
+        setRows((prev) => sortRows([newRow, ...prev]));
+      } catch {
+        Alert.alert("שגיאה", `לא ניתן להוסיף את "${name}"`);
+      }
+    }
+
+    closeVoiceModal();
+  };
+
+  const handleReRecord = async () => {
+    setVoiceResult(null);
+    await cancelRecording();
+    await startRecording();
+  };
+
+  // Auto-search when recording stops and there is a transcript
+  const wasRecordingRef = useRef(false);
+  useEffect(() => {
+    if (wasRecordingRef.current && !isRecording && transcript.trim() && !voiceResult) {
+      handleVoiceSubmit();
+    }
+    wasRecordingRef.current = isRecording;
+  }, [isRecording]);
+
   useEffect(() => {
     fetchInventory().then((inv) => setAllInventoryNames(inv.map((i) => i.item_name)));
+    fetchItemsWithImages().then((names) => setItemsWithImages(new Set(names)));
   }, []);
 
   const handleRefresh = useCallback(async () => {
@@ -369,6 +419,11 @@ export default function PurchaseScreen() {
                 editable={!row.checked}
                 selectTextOnFocus
               />
+              {itemsWithImages.has(row.item.item_name) && (
+                <TouchableOpacity onPress={() => handleViewImage(row.item.item_name)}>
+                  <Ionicons name="image-outline" size={22} color="#888" />
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         )}
@@ -412,11 +467,6 @@ export default function PurchaseScreen() {
                 {transcript.length > 0 && <Text style={styles.voiceTranscript}>{transcript}</Text>}
                 {voiceError && <Text style={[styles.voiceTranscript, { color: "#c62828" }]}>{voiceError}</Text>}
                 <View style={{ flexDirection: "row", gap: 8 }}>
-                  {!isRecording && transcript.length > 0 && (
-                    <TouchableOpacity style={[styles.modalAddBtn, { flex: 1 }]} onPress={handleVoiceSubmit} disabled={voiceProcessing}>
-                      <Text style={styles.modalAddBtnText}>{voiceProcessing ? "מעבד..." : "חפש ברשימה"}</Text>
-                    </TouchableOpacity>
-                  )}
                   {isRecording ? (
                     <TouchableOpacity style={[styles.modalAddBtn, { flex: 1, backgroundColor: "#e53935" }]} onPress={stopRecording}>
                       <Text style={styles.modalAddBtnText}>עצור</Text>
@@ -438,30 +488,44 @@ export default function PurchaseScreen() {
                     {voiceResult.found.map((item) => (
                       <View key={item.matched} style={styles.voiceResultRow}>
                         <Text style={styles.voiceResultName}>{item.matched} {getItemIcon(item.matched)}</Text>
-                        <Text style={styles.voiceResultDetail}>יש: {item.current_quantity} / רצוי: {item.desired_quantity}</Text>
                       </View>
                     ))}
                   </>
                 )}
                 {voiceResult.not_found.length > 0 && (
                   <>
-                    <Text style={[styles.voiceSectionTitle, { color: "#e65100" }]}>❓ לא נמצאו ({voiceResult.not_found.length})</Text>
-                    {voiceResult.not_found.map((name) => (
-                      <View key={name} style={styles.voiceResultRow}>
-                        <Text style={[styles.voiceResultName, { flex: 1 }]}>{name}</Text>
-                        <TouchableOpacity style={styles.voiceAddBtn} onPress={() => handleAddVoiceItem(name)} disabled={addingVoiceItem === name}>
-                          <Text style={styles.voiceAddBtnText}>{addingVoiceItem === name ? "מוסיף..." : "+ הוסף"}</Text>
+                    <Text style={[styles.voiceSectionTitle, { color: "#e65100" }]}>❓ הוסף כפריט זמני ({voiceResult.not_found.length})</Text>
+                    {voiceResult.not_found.map((name) => {
+                      const checked = checkedNotFound.has(name);
+                      return (
+                        <TouchableOpacity key={name} style={styles.voiceResultRow} onPress={() => setCheckedNotFound((prev) => {
+                          const next = new Set(prev);
+                          checked ? next.delete(name) : next.add(name);
+                          return next;
+                        })}>
+                          <Ionicons name={checked ? "checkbox" : "square-outline"} size={22} color={BLUE} style={{ marginLeft: 4 }} />
+                          <Text style={[styles.voiceResultName, { flex: 1, marginRight: 8 }]}>{name}</Text>
                         </TouchableOpacity>
-                      </View>
-                    ))}
+                      );
+                    })}
                   </>
                 )}
                 {voiceResult.found.length === 0 && voiceResult.not_found.length === 0 && (
                   <Text style={styles.voiceStatusText}>לא זוהו פריטים. נסה שוב.</Text>
                 )}
-                <TouchableOpacity style={[styles.modalCancelBtn, { marginTop: 12 }]} onPress={closeVoiceModal}>
-                  <Text style={styles.modalCancelText}>סגור</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 12, alignItems: "center" }}>
+                  {(voiceResult.found.length > 0 || checkedNotFound.size > 0) && (
+                    <TouchableOpacity style={[styles.modalAddBtn, { flex: 1, marginBottom: 0 }]} onPress={handleAddAllFound}>
+                      <Text style={styles.modalAddBtnText}>הוסף</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity style={[styles.modalCancelBtn, { flex: 1 }]} onPress={closeVoiceModal}>
+                    <Text style={styles.modalCancelText}>סגור</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.fabButtonMic} onPress={handleReRecord}>
+                    <Ionicons name="mic" size={20} color="#fff" />
+                  </TouchableOpacity>
+                </View>
               </ScrollView>
             )}
           </TouchableOpacity>
@@ -482,6 +546,15 @@ export default function PurchaseScreen() {
               <Text style={styles.modalAddBtnText}>{savingTemp ? "שומר..." : "הוסף לרשימה"}</Text>
             </TouchableOpacity>
           </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Full-screen image viewer */}
+      <Modal visible={!!viewImage} transparent animationType="fade" onRequestClose={() => setViewImage(null)}>
+        <TouchableOpacity style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.9)", justifyContent: "center", alignItems: "center" }} activeOpacity={1} onPress={() => setViewImage(null)}>
+          {viewImage && (
+            <Image source={{ uri: `data:image/jpeg;base64,${viewImage}` }} style={{ width: "90%", height: "70%", resizeMode: "contain" }} />
+          )}
         </TouchableOpacity>
       </Modal>
 

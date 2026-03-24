@@ -160,16 +160,50 @@ export async function deleteInventoryItem(item_name: string, type?: string): Pro
   if (!res.ok) throw new Error("Failed to delete inventory item");
 }
 
+export class AuthError extends Error {}
+
+export async function uploadItemImage(item_name: string, imageBase64: string): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/inventory/image`, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify({ item_name, image_base64: imageBase64 }),
+  });
+  if (!res.ok) throw new Error("Failed to upload image");
+}
+
+export async function fetchItemImage(item_name: string): Promise<string | null> {
+  const res = await apiFetch(`${BASE_URL}/inventory/image/${encodeURIComponent(item_name)}`, {
+    headers: await authHeaders(),
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error("Failed to fetch image");
+  const data = await res.json();
+  return data.image_base64;
+}
+
+export async function checkItemHasImage(item_name: string): Promise<boolean> {
+  const res = await apiFetch(`${BASE_URL}/inventory/image-exists/${encodeURIComponent(item_name)}`, {
+    headers: await authHeaders(),
+  });
+  if (!res.ok) return false;
+  const data = await res.json();
+  return data.exists;
+}
+
+export async function fetchItemsWithImages(): Promise<string[]> {
+  const res = await apiFetch(`${BASE_URL}/inventory/images`, { headers: await authHeaders() });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.items as string[];
+}
+
 export async function fetchHousehold(): Promise<string | null> {
-  try {
-    const res = await apiFetch(`${BASE_URL}/household/me`, { headers: await authHeaders() });
-    if (res.status === 404) return null;
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.household_id;
-  } catch {
-    return null;
-  }
+  const res = await apiFetch(`${BASE_URL}/household/me`, { headers: await authHeaders() });
+  if (res.status === 401) throw new AuthError("Unauthorized");
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Unexpected status ${res.status}`);
+  const data = await res.json();
+  return data.household_id;
 }
 
 export async function createHousehold(): Promise<string> {

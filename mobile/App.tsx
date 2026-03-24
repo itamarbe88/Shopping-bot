@@ -14,7 +14,7 @@ import PurchaseScreen from "./src/screens/PurchaseScreen";
 import ShoppingListScreen from "./src/screens/ShoppingListScreen";
 import SimulationScreen from "./src/screens/SimulationScreen";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
-import { fetchHousehold, setOnUnauthorized } from "./src/api";
+import { AuthError, fetchHousehold, setOnUnauthorized } from "./src/api";
 
 // Force RTL layout for Hebrew
 I18nManager.forceRTL(true);
@@ -121,11 +121,18 @@ function RootNavigator() {
   }, [signOut]);
 
   React.useEffect(() => {
-    if (user) {
-      fetchHousehold().then(setHousehold).catch(() => setHousehold(null));
-    } else {
-      setHousehold(undefined);
-    }
+    if (!user) { setHousehold(undefined); return; }
+    fetchHousehold()
+      .then(setHousehold)
+      .catch(async (err) => {
+        if (err instanceof AuthError) {
+          // Transient auth error (e.g. Google certificate cache miss) — retry once after a short delay
+          await new Promise((r) => setTimeout(r, 2000));
+          fetchHousehold().then(setHousehold).catch(() => setHousehold(null));
+        } else {
+          setHousehold(null);
+        }
+      });
   }, [user]);
 
   if (loading || (user && household === undefined)) {

@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   Keyboard,
   Modal,
   RefreshControl,
@@ -14,7 +15,10 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { InventoryItem, fetchInventory, deleteInventoryItem, upsertInventoryItem } from "../api";
+import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
+import { Ionicons } from "@expo/vector-icons";
+import { InventoryItem, fetchInventory, deleteInventoryItem, upsertInventoryItem, uploadItemImage, fetchItemImage } from "../api";
 import { getItemIcon } from "../icons";
 
 const BLUE = "#0288D1";
@@ -43,6 +47,10 @@ export default function InventoryScreen() {
   const [newDays, setNewDays] = useState("");
   const [newDate, setNewDate] = useState("");
   const [adding, setAdding] = useState(false);
+
+  const [addImageBase64, setAddImageBase64] = useState<string | null>(null);
+  const [editImageBase64, setEditImageBase64] = useState<string | null>(null);
+  const [viewImageBase64, setViewImageBase64] = useState<string | null>(null);
 
   useEffect(() => {
     const show = Keyboard.addListener("keyboardDidShow", (e) => setKeyboardOffset(e.endCoordinates.height));
@@ -134,6 +142,8 @@ export default function InventoryScreen() {
     setEditDesired(item.desired_quantity);
     setEditDays(item.days_until_restock);
     setEditDate(item.last_purchased_date);
+    setEditImageBase64(null);
+    fetchItemImage(item.item_name).then(setEditImageBase64).catch(() => {});
   };
 
   const handleDelete = async () => {
@@ -171,6 +181,9 @@ export default function InventoryScreen() {
         days_until_restock: parseInt(editDays) || 7,
         last_purchased_date: editDate || undefined,
       });
+      if (editImageBase64) {
+        await uploadItemImage(editName.trim(), editImageBase64);
+      }
       setEditItem(null);
       load();
     } catch {
@@ -181,9 +194,56 @@ export default function InventoryScreen() {
   };
 
   const openAdd = () => {
-    const today = new Date().toISOString().split("T")[0];
     setNewName(""); setNewCurrent(""); setNewDesired(""); setNewDays(""); setNewDate("0");
+    setAddImageBase64(null);
     setAddVisible(true);
+  };
+
+  const pickImage = async (onResult: (base64: string) => void) => {
+    Alert.alert("הוסף תמונה", "בחר מקור", [
+      {
+        text: "מצלמה", onPress: async () => {
+          const perm = await ImagePicker.requestCameraPermissionsAsync();
+          if (!perm.granted) { Alert.alert("נדרשת הרשאה", "אפשר גישה למצלמה בהגדרות."); return; }
+          const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.8 });
+          if (!result.canceled) await processImage(result.assets[0].uri, onResult);
+        }
+      },
+      {
+        text: "גלריה", onPress: async () => {
+          const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (!perm.granted) { Alert.alert("נדרשת הרשאה", "אפשר גישה לגלריה בהגדרות."); return; }
+          const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });
+          if (!result.canceled) await processImage(result.assets[0].uri, onResult);
+        }
+      },
+      { text: "ביטול", style: "cancel" },
+    ]);
+  };
+
+  const processImage = async (uri: string, onResult: (base64: string) => void) => {
+    try {
+      // Resize to 1080x1080 and compress
+      let quality = 0.85;
+      let result = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 1080, height: 1080 } }],
+        { compress: quality, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+      // Reduce quality until under 200KB
+      while (result.base64 && result.base64.length * 0.75 > 200 * 1024 && quality > 0.1) {
+        quality -= 0.1;
+        result = await ImageManipulator.manipulateAsync(
+          uri,
+          [{ resize: { width: 1080, height: 1080 } }],
+          { compress: quality, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        );
+      }
+      if (!result.base64) { Alert.alert("שגיאה", "לא ניתן לעבד את התמונה."); return; }
+      onResult(result.base64);
+    } catch {
+      Alert.alert("שגיאה", "לא ניתן לעבד את התמונה.");
+    }
   };
 
   const handleAdd = async () => {
@@ -206,6 +266,9 @@ export default function InventoryScreen() {
         days_until_restock: parseInt(newDays) || 7,
         last_purchased_date: lastDateStr,
       });
+      if (addImageBase64) {
+        await uploadItemImage(newName.trim(), addImageBase64);
+      }
       setAddVisible(false);
       load();
     } catch {
@@ -385,6 +448,15 @@ export default function InventoryScreen() {
             <Text style={styles.fieldLabel}>לפני כמה ימים נרכש לאחרונה? (0 = היום)</Text>
             <TextInput style={styles.fieldInput} value={newDate} onChangeText={setNewDate} keyboardType="numeric" placeholder="0" textAlign="right" />
 
+            <View style={styles.imageRow}>
+              {addImageBase64 ? (
+                <Image source={{ uri: `data:image/jpeg;base64,${addImageBase64}` }} style={styles.imagePreview} />
+              ) : null}
+              <TouchableOpacity style={styles.cameraBtn} onPress={() => pickImage(setAddImageBase64)}>
+                <Ionicons name={addImageBase64 ? "camera" : "camera-outline"} size={22} color="#555" />
+              </TouchableOpacity>
+            </View>
+
             <View style={styles.bottomBtnRow}>
               <TouchableOpacity style={[styles.saveBtn, { flex: 1 }]} onPress={handleAdd} disabled={adding}>
                 <Text style={styles.saveBtnText}>{adding ? "מוסיף..." : "הוסף"}</Text>
@@ -424,6 +496,15 @@ export default function InventoryScreen() {
               <Text style={styles.infoLabel}>נרכש לאחרונה {editDate ? `לפני ${calculateDaysAgo(editDate)} ימים` : "—"}</Text>
               <Text style={styles.infoLabel}>רכישה הבאה {editItem?.next_purchase_date ? `בעוד ${calculateDaysAgo(editItem.next_purchase_date)} ימים` : "—"}</Text>
               <Text style={styles.infoLabel}>חסר {Math.max(0, (parseFloat(editDesired) || 0) - (parseFloat(editCurrent) || 0))} יחידות</Text>
+            </View>
+
+            <View style={styles.imageRow}>
+              {editImageBase64 ? (
+                <Image source={{ uri: `data:image/jpeg;base64,${editImageBase64}` }} style={styles.imagePreview} />
+              ) : null}
+              <TouchableOpacity style={styles.cameraBtn} onPress={() => pickImage(setEditImageBase64)}>
+                <Ionicons name={editImageBase64 ? "camera" : "camera-outline"} size={22} color="#555" />
+              </TouchableOpacity>
             </View>
 
             <View style={styles.bottomBtnRow}>
@@ -509,4 +590,7 @@ const styles = StyleSheet.create({
   fab: { position: "absolute", bottom: 24, left: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: BLUE, alignItems: "center", justifyContent: "center", elevation: 8, shadowColor: BLUE, shadowOpacity: 0.4, shadowRadius: 8 },
   fabText: { color: "#fff", fontSize: 32, lineHeight: 36, fontWeight: "300" },
   required: { color: "#e53935" },
+  imageRow: { flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 10 },
+  imagePreview: { width: 64, height: 64, borderRadius: 8, borderWidth: 1, borderColor: "#e0e0e0" },
+  cameraBtn: { width: 44, height: 44, borderRadius: 8, borderWidth: 1.5, borderColor: "#90caf9", alignItems: "center", justifyContent: "center", backgroundColor: "#f8fbff" },
 });

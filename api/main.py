@@ -20,9 +20,13 @@ from api.logic import (
     generate_shopping_list,
     get_household_id,
     get_inventory,
+    get_item_image,
+    item_has_image,
     join_household,
     process_voice_items,
     read_last_list,
+    list_items_with_images,
+    save_item_image,
     upsert_item,
     write_last_list,
 )
@@ -211,6 +215,40 @@ def add_temporary_item(body: TempItemRequest, hh: str = Depends(get_hh_id)):
     })
     _save(items, hh)
     return {"success": True, "item": body.item_name, "quantity": body.quantity}
+
+
+# ── Item images ──────────────────────────────────────────────────────────────
+
+import base64
+
+class ImageUploadRequest(BaseModel):
+    item_name: str
+    image_base64: str  # JPEG bytes encoded as base64, max 200KB
+
+MAX_IMAGE_BYTES = 200 * 1024  # 200 KB
+
+@app.post("/inventory/image")
+def upload_item_image(body: ImageUploadRequest, hh: str = Depends(get_hh_id)):
+    image_bytes = base64.b64decode(body.image_base64)
+    if len(image_bytes) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=400, detail="Image exceeds 200KB limit")
+    save_item_image(hh, body.item_name, image_bytes)
+    return {"success": True}
+
+@app.get("/inventory/image/{item_name}")
+def download_item_image(item_name: str, hh: str = Depends(get_hh_id)):
+    data = get_item_image(hh, item_name)
+    if data is None:
+        raise HTTPException(status_code=404, detail="No image for this item")
+    return {"image_base64": base64.b64encode(data).decode()}
+
+@app.get("/inventory/image-exists/{item_name}")
+def check_item_image(item_name: str, hh: str = Depends(get_hh_id)):
+    return {"exists": item_has_image(hh, item_name)}
+
+@app.get("/inventory/images")
+def list_images(hh: str = Depends(get_hh_id)):
+    return {"items": list_items_with_images(hh)}
 
 
 class VoiceRequest(BaseModel):

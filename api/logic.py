@@ -82,6 +82,43 @@ def _member_path(user_id: str) -> str:
     return f"members/{user_id}.json"
 
 
+def _image_path(household_id: str, item_name: str) -> str:
+    safe = item_name.replace("/", "_").replace(" ", "_")
+    return f"households/{household_id}/images/{safe}.jpg"
+
+
+def save_item_image(household_id: str, item_name: str, image_bytes: bytes) -> None:
+    _write(_image_path(household_id, item_name), image_bytes)
+
+
+def get_item_image(household_id: str, item_name: str) -> bytes | None:
+    return _read(_image_path(household_id, item_name))
+
+
+def item_has_image(household_id: str, item_name: str) -> bool:
+    return _exists(_image_path(household_id, item_name))
+
+
+def list_items_with_images(household_id: str) -> list[str]:
+    """Return item names that have an image stored."""
+    prefix = f"households/{household_id}/images/"
+    if GCS_BUCKET:
+        blobs = _gcs_client.list_blobs(_bucket, prefix=prefix)
+        names = []
+        for blob in blobs:
+            filename = blob.name[len(prefix):]  # e.g. "שום.jpg"
+            if filename.endswith(".jpg"):
+                item_name = filename[:-4].replace("_", " ")
+                names.append(item_name)
+        return names
+    else:
+        import os
+        images_dir = DATA_DIR / prefix
+        if not images_dir.exists():
+            return []
+        return [f.stem.replace("_", " ") for f in images_dir.glob("*.jpg")]
+
+
 # ── Household operations ────────────────────────────────────────────────────────
 
 def get_household_id(user_id: str) -> str | None:
@@ -337,36 +374,15 @@ def delete_last_list(household_id: str) -> None:
 
 # ── Voice inventory ─────────────────────────────────────────────────────────────
 
-import anthropic as _anthropic
-
 def process_voice_items(household_id: str, speech_text: str) -> dict:
     """
-    Parse Hebrew speech text into grocery items via Claude,
+    Parse Hebrew speech text into grocery items by splitting on common delimiters,
     then match each item against the inventory using contains matching.
     """
-    client = _anthropic.Anthropic()
-
-    message = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=512,
-        messages=[{
-            "role": "user",
-            "content": (
-                "Extract grocery item names from the following Hebrew speech.\n"
-                "Return ONLY a JSON array of Hebrew item names, no explanation.\n"
-                'Example: ["חלב", "לחם", "ביצים"]\n\n'
-                f"Speech: {speech_text}"
-            ),
-        }],
-    )
-
-    raw = message.content[0].text.strip()
-    try:
-        start = raw.find("[")
-        end = raw.rfind("]") + 1
-        parsed_items: list[str] = json.loads(raw[start:end]) if start >= 0 and end > start else []
-    except (json.JSONDecodeError, ValueError):
-        parsed_items = []
+    import re
+    # Split on commas, "ו" conjunctions, or multiple spaces
+    raw_tokens = re.split(r"[,،\s]+", speech_text.strip())
+    parsed_items = [t.strip() for t in raw_tokens if t.strip()]
 
     inventory = _load(household_id)
 
