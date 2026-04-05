@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 
 from api.logic import (
     _load,
@@ -28,8 +28,10 @@ from api.logic import (
     read_last_list,
     list_items_with_images,
     save_item_image,
+    set_item_on_hold,
     upsert_item,
     write_last_list,
+    get_onboarding_template,
 )
 
 GOOGLE_CLIENT_ID = os.environ["GOOGLE_CLIENT_ID"]
@@ -104,6 +106,11 @@ def household_join(body: JoinRequest, user_id: str = Depends(get_user_id)):
     return {"household_id": body.code.upper().strip()}
 
 
+@app.get("/onboarding/template")
+def onboarding_template(user_id: str = Depends(get_user_id)):
+    return get_onboarding_template()
+
+
 # ── Inventory ──────────────────────────────────────────────────────────────────
 
 @app.get("/inventory")
@@ -118,6 +125,24 @@ class UpsertItemRequest(BaseModel):
     desired_quantity: int
     days_until_restock: int
     last_purchased_date: str | None = None
+
+    @validator("item_name")
+    def item_name_not_empty(cls, v):
+        if not v or not v.strip():
+            raise ValueError("item_name cannot be empty")
+        return v.strip()
+
+    @validator("current_quantity", "desired_quantity")
+    def qty_non_negative(cls, v):
+        if v < 0:
+            raise ValueError("quantity cannot be negative")
+        return v
+
+    @validator("days_until_restock")
+    def days_positive(cls, v):
+        if v < 1:
+            raise ValueError("days_until_restock must be at least 1")
+        return v
 
 
 @app.post("/inventory/item")
@@ -187,6 +212,27 @@ class ConfirmRequest(BaseModel):
 def remove_from_shopping_list(item_name: str, hh: str = Depends(get_hh_id)):
     items = read_last_list(hh)
     items = [i for i in items if i["item_name"] != item_name]
+    write_last_list(hh, items)
+    return {"success": True}
+
+
+class QtyOverrideRequest(BaseModel):
+    quantity: int
+
+    @validator("quantity")
+    def qty_positive(cls, v):
+        if v < 1:
+            raise ValueError("quantity must be at least 1")
+        return v
+
+
+@app.patch("/shopping-list/item/{item_name}/qty")
+def override_shopping_list_qty(item_name: str, body: QtyOverrideRequest, hh: str = Depends(get_hh_id)):
+    items = read_last_list(hh)
+    for item in items:
+        if item["item_name"] == item_name:
+            item["quantity_to_buy"] = body.quantity
+            break
     write_last_list(hh, items)
     return {"success": True}
 
@@ -264,6 +310,18 @@ class VoiceRequest(BaseModel):
 @app.post("/inventory/voice")
 def voice_inventory(body: VoiceRequest, hh: str = Depends(get_hh_id)):
     return process_voice_items(hh, body.speech_text)
+
+
+class HoldRequest(BaseModel):
+    on_hold: bool
+
+
+@app.post("/inventory/item/{item_name}/hold")
+def toggle_hold(item_name: str, body: HoldRequest, hh: str = Depends(get_hh_id)):
+    result = set_item_on_hold(hh, item_name, body.on_hold)
+    if not result["success"]:
+        raise HTTPException(status_code=404, detail=result.get("message"))
+    return result
 
 
 @app.post("/inventory/manual")

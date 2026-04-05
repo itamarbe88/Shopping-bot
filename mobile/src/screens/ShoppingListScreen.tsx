@@ -1,26 +1,43 @@
 import { useNavigation } from "@react-navigation/native";
 import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { fetchShoppingList } from "../api";
+import { fetchLastShoppingList, fetchShoppingList } from "../api";
 
 export default function ShoppingListScreen() {
   const navigation = useNavigation<any>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Warm the cache whenever this screen is visible and online
+  useEffect(() => {
+    fetchLastShoppingList().catch(() => {});
+  }, []);
+
   const handleGenerate = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchShoppingList(false);
-      navigation.navigate("Purchase", { items: result.shopping_list });
+      const last = await fetchLastShoppingList();
+      if (last.offline) {
+        if (!last.shopping_list.length) {
+          setError("אין חיבור לאינטרנט ואין רשימה שמורה במכשיר.");
+          return;
+        }
+        if (last.cacheExpired) {
+          setError("אין חיבור לאינטרנט — הרשימה השמורה ישנה מ-24 שעות. ייתכן שאינה מעודכנת.");
+          return;
+        }
+        navigation.navigate("Purchase", { items: last.shopping_list, offline: true });
+        return;
+      }
+      const items = last.shopping_list.length > 0 ? last.shopping_list : (await fetchShoppingList(false)).shopping_list;
+      navigation.navigate("Purchase", { items });
     } catch {
       setError("לא ניתן להתחבר לשרת.");
     } finally {
       setLoading(false);
     }
   }, [navigation]);
-
 
   useEffect(() => {
     navigation.setOptions({ headerBackVisible: false, headerRight: undefined });
@@ -29,14 +46,10 @@ export default function ShoppingListScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>רשימת קניות</Text>
-        <Text style={styles.cardDesc}>
-          לחץ כדי לחשב את מה שחסר, לעדכן את המלאי ולפתוח את רשימת הקנייה
-        </Text>
         <TouchableOpacity style={styles.button} onPress={handleGenerate} disabled={loading}>
           {loading
             ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.buttonText}>  יצר לי רשימת קניות 🛒</Text>
+            : <Text style={styles.buttonText}> אני בדרך לקניות... 🛒</Text>
           }
         </TouchableOpacity>
         {error && <Text style={styles.error}>{error}</Text>}

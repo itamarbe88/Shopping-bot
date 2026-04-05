@@ -15,6 +15,7 @@ module.exports = {
     },
     ios: {
       supportsTablet: true,
+      bundleIdentifier: "com.itamarbenezra.salvador",
     },
     android: {
       adaptiveIcon: {

@@ -12,7 +12,7 @@ import CartIcon from "../CartIcon";
 import { createHousehold, joinHousehold } from "../api";
 
 interface Props {
-  onHouseholdReady: (householdId: string) => void;
+  onHouseholdReady: (householdId: string, isNew: boolean) => void;
 }
 
 export default function HouseholdScreen({ onHouseholdReady }: Props) {
@@ -27,7 +27,7 @@ export default function HouseholdScreen({ onHouseholdReady }: Props) {
       Alert.alert(
         "הרשימה נוצרה!",
         `קוד השיתוף שלך: ${id}\n\nשלח את הקוד לבני המשפחה כדי שיוכלו להצטרף.\nתוכל למצוא את הקוד גם בדף הפרופיל.`,
-        [{ text: "אישור", onPress: () => onHouseholdReady(id) }]
+        [{ text: "אישור", onPress: () => onHouseholdReady(id, true) }]
       );
     } catch {
       Alert.alert("שגיאה", "לא ניתן ליצור רשימה. נסה שוב.");
@@ -44,7 +44,7 @@ export default function HouseholdScreen({ onHouseholdReady }: Props) {
     setLoading(true);
     try {
       const id = await joinHousehold(code.trim());
-      onHouseholdReady(id);
+      onHouseholdReady(id, false);
     } catch (e: any) {
       Alert.alert("שגיאה", e.message || "הקוד לא נמצא. בדוק שוב.");
     } finally {

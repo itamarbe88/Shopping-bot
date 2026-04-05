@@ -1,3 +1,4 @@
+import NetInfo from "@react-native-community/netinfo";
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -16,11 +17,11 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { PurchaseItem, ShoppingItem, VoiceMatchedItem, addManualItem, addTemporaryItem, confirmPurchases, deleteInventoryItem, fetchInventory, fetchItemImage, fetchItemsWithImages, fetchShoppingList, processVoiceItems, removeFromShoppingList } from "../api";
+import { PurchaseItem, ShoppingItem, VoiceMatchedItem, addManualItem, addTemporaryItem, confirmPurchases, deleteInventoryItem, fetchInventory, fetchItemImage, fetchItemsWithImages, fetchLastShoppingList, fetchShoppingList, overrideShoppingListQty, processVoiceItems, removeFromShoppingList } from "../api";
 import { getItemIcon } from "../icons";
 import { useVoice } from "../hooks/useVoice";
 
-interface RouteParams { items: ShoppingItem[] }
+interface RouteParams { items: ShoppingItem[]; offline?: boolean }
 
 interface PurchaseRow {
   item: ShoppingItem;
@@ -40,7 +41,9 @@ export default function PurchaseScreen() {
     const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardOffset(0));
     return () => { show.remove(); hide.remove(); };
   }, []);
-  const routeItems = (route.params as RouteParams | undefined)?.items;
+  const routeParams = route.params as RouteParams | undefined;
+  const routeItems = routeParams?.items;
+  const [isOffline, setIsOffline] = useState(!!routeParams?.offline);
 
   const rowPriority = (row: PurchaseRow): number => {
     if (row.item.is_temporary) return 0;
@@ -61,6 +64,51 @@ export default function PurchaseScreen() {
   const [hasGenerated, setHasGenerated] = useState(!!routeItems);
   const [submitting, setSubmitting] = useState(false);
 
+  useFocusEffect(useCallback(() => {
+    if (!hasGenerated) return;
+    fetchLastShoppingList().then((result) => {
+      if (result.offline) return; // no internet, keep what we have
+      if (!result.shopping_list.length) return;
+      setIsOffline(false);
+      setRows((prev) => {
+        const prevMap = new Map(prev.map((r) => [r.item.item_name, r]));
+        const updated = result.shopping_list.map((item) => {
+          const existing = prevMap.get(item.item_name);
+          if (existing) return { ...existing, item, qty: existing.checked ? existing.qty : String(item.quantity_to_buy) };
+          return { item, checked: false, qty: String(item.quantity_to_buy), isExtra: item.item_type === "manual" };
+        });
+        // Keep manually added extras that aren't in the new list
+        const newNames = new Set(result.shopping_list.map((i) => i.item_name));
+        const extras = prev.filter((r) => r.isExtra && !newNames.has(r.item.item_name));
+        return sortRows([...updated, ...extras]);
+      });
+    }).catch(() => {});
+  }, [hasGenerated]));
+
+  // When offline, re-fetch as soon as connectivity is restored
+  useEffect(() => {
+    if (!isOffline) return;
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      if (state.isConnected && state.isInternetReachable !== false) {
+        fetchLastShoppingList().then((result) => {
+          if (result.offline || !result.shopping_list.length) return;
+          setIsOffline(false);
+          setRows((prev) => {
+            const prevMap = new Map(prev.map((r) => [r.item.item_name, r]));
+            const updated = result.shopping_list.map((item) => {
+              const existing = prevMap.get(item.item_name);
+              if (existing) return { ...existing, item, qty: existing.checked ? existing.qty : String(item.quantity_to_buy) };
+              return { item, checked: false, qty: String(item.quantity_to_buy), isExtra: item.item_type === "manual" };
+            });
+            const newNames = new Set(result.shopping_list.map((i) => i.item_name));
+            const extras = prev.filter((r) => r.isExtra && !newNames.has(r.item.item_name));
+            return sortRows([...updated, ...extras]);
+          });
+        }).catch(() => {});
+      }
+    });
+    return unsubscribe;
+  }, [isOffline]);
 
   // Blue + modal (session-only extra items)
   const [modalVisible, setModalVisible] = useState(false);
@@ -83,6 +131,7 @@ export default function PurchaseScreen() {
   const [voiceProcessing, setVoiceProcessing] = useState(false);
   const [voiceResult, setVoiceResult] = useState<{ found: VoiceMatchedItem[]; not_found: string[] } | null>(null);
   const [checkedNotFound, setCheckedNotFound] = useState<Set<string>>(new Set());
+  const [checkedFound, setCheckedFound] = useState<Set<string>>(new Set());
 
   // ── Item images ────────────────────────────────────────────────────────────
   const [itemsWithImages, setItemsWithImages] = useState<Set<string>>(new Set());
@@ -111,6 +160,8 @@ export default function PurchaseScreen() {
     try {
       const result = await processVoiceItems(transcript.trim());
       setVoiceResult(result);
+      const existingNames = new Set(rows.map((r) => r.item.item_name));
+      setCheckedFound(new Set(result.found.map((i) => i.matched).filter((n) => !existingNames.has(n))));
       setCheckedNotFound(new Set(result.not_found));
     } catch {
       Alert.alert("שגיאה", "לא ניתן לעבד את הדיבור. נסה שוב.");
@@ -130,9 +181,16 @@ export default function PurchaseScreen() {
 
     const existingNames = new Set(rows.map((r) => r.item.item_name));
 
-    // Found items — same logic as הוסף פריט מלאי button
+    if (checkedFound.size === 0 && checkedNotFound.size === 0) {
+      Alert.alert("", "הפריטים שנבחרו כבר נמצאים ברשימה.");
+      return;
+    }
+
+    const alreadyInList: string[] = [];
+
     for (const item of voiceResult.found) {
-      if (existingNames.has(item.matched)) continue;
+      if (!checkedFound.has(item.matched)) continue;
+      if (existingNames.has(item.matched)) { alreadyInList.push(item.matched); continue; }
       try {
         await addManualItem(item.matched, 1);
         const newRow: PurchaseRow = {
@@ -147,7 +205,7 @@ export default function PurchaseScreen() {
 
     // Not-found checked items — add to inventory as temporary then add to rows
     for (const name of checkedNotFound) {
-      if (existingNames.has(name)) continue;
+      if (existingNames.has(name)) { alreadyInList.push(name); continue; }
       try {
         await addTemporaryItem(name, 1);
         const newRow: PurchaseRow = {
@@ -160,7 +218,11 @@ export default function PurchaseScreen() {
       }
     }
 
-    closeVoiceModal();
+    if (alreadyInList.length > 0) {
+      Alert.alert("", `הפריטים הבאים כבר ברשימה ולא נוספו:\n${alreadyInList.join(", ")}`);
+    } else {
+      closeVoiceModal();
+    }
   };
 
   const handleReRecord = async () => {
@@ -203,18 +265,19 @@ export default function PurchaseScreen() {
 
   useEffect(() => {
     navigation.setOptions({
-      headerLeft: () => (
+      title: "קניות",
+      headerLeft: hasGenerated ? () => (
         <TouchableOpacity onPress={handleRefresh} style={{ marginHorizontal: 16, padding: 6 }}>
           <Text style={{ color: "#fff", fontSize: 28 }}>↻</Text>
         </TouchableOpacity>
-      ),
-      headerRight: () => (
-        <TouchableOpacity onPress={() => { setHasGenerated(false); setRows([]); navigation.navigate("Shopping"); }} style={{ marginHorizontal: 16, padding: 6 }}>
+      ) : () => null,
+      headerRight: hasGenerated ? () => (
+        <TouchableOpacity onPress={() => { setHasGenerated(false); setRows([]); }} style={{ marginHorizontal: 16, padding: 6 }}>
           <Text style={{ color: "#fff", fontSize: 28 }}>›</Text>
         </TouchableOpacity>
-      ),
+      ) : () => null,
     });
-  }, [navigation, handleRefresh]);
+  }, [navigation, handleRefresh, hasGenerated]);
 
   const toggle = (i: number) =>
     setRows((prev) => sortRows(prev.map((r, idx) => idx === i ? { ...r, checked: !r.checked } : r)));
@@ -303,7 +366,7 @@ export default function PurchaseScreen() {
     try {
       await confirmPurchases(purchases);
       Alert.alert("הקנייה הושלמה בהצלחה!", `עודכנו ${purchases.length - tempItems} פריטים במלאי.`, [
-        { text: "סגור", onPress: () => { setRows([]); setHasGenerated(false); navigation.navigate("Shopping"); } },
+        { text: "סגור", onPress: () => { setRows([]); setHasGenerated(false); } },
       ]);
     } catch {
       Alert.alert("שגיאה", "לא ניתן לעדכן את המלאי.");
@@ -316,8 +379,8 @@ export default function PurchaseScreen() {
     return (
       <View style={{ flex: 1, backgroundColor: "#f0f8ff", justifyContent: "center", padding: 20 }}>
         <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 24, elevation: 4 }}>
-          <Text style={{ fontSize: 15, color: "#666", textAlign: "center", lineHeight: 22, marginBottom: 24 }}>
-סלבדור ייצר לכם רשימת קניות לפי חוסרי המלאי שלכם, אל הרשימה תוכלו להוסיף פרטי מלאי אחרים וגם פריטים זמניים
+          <Text style={{ fontSize: 15, color: "#666", textAlign: "center", lineHeight: 24, marginBottom: 24 }}>
+במסך הזה תוכלו לסמן פריטים תוך כדי רכישה בסופר, ולהוסיף פריטים שלקחתם ולא היו ברשימה המקורית.{"\n\n"}לחצו על <Text style={{ fontWeight: "700", color: "#0288D1" }}> סיום קנייה </Text>בכדי לעדכן את המלאי לקנייה עתידית.
           </Text>
           <TouchableOpacity
             style={{ backgroundColor: "#0288D1", paddingVertical: 16, borderRadius: 12, alignItems: "center", elevation: 2 }}
@@ -329,7 +392,15 @@ export default function PurchaseScreen() {
                 setRows(toRows(result.shopping_list));
                 setHasGenerated(true);
               } catch {
-                Alert.alert("שגיאה", "לא ניתן להתחבר לשרת.");
+                // Offline fallback — try cached list
+                const cached = await fetchLastShoppingList();
+                if (cached.shopping_list.length > 0) {
+                  setIsOffline(!!cached.offline);
+                  setRows(toRows(cached.shopping_list));
+                  setHasGenerated(true);
+                } else {
+                  Alert.alert("שגיאה", cached.offline ? "אין חיבור לאינטרנט ואין רשימה שמורה במכשיר." : "לא ניתן להתחבר לשרת.");
+                }
               } finally {
                 setSubmitting(false);
               }
@@ -337,7 +408,7 @@ export default function PurchaseScreen() {
           >
             {submitting
               ? <ActivityIndicator color="#fff" />
-              : <Text style={{ color: "#fff", fontSize: 18, fontWeight: "700" }}>יצר לי רשימת קניות 🛒</Text>
+              : <Text style={{ color: "#fff", fontSize: 18, fontWeight: "700" }}>הגעתי לסופר!</Text>
             }
           </TouchableOpacity>
         </View>
@@ -347,6 +418,11 @@ export default function PurchaseScreen() {
 
   return (
     <View style={styles.container}>
+      {isOffline && (
+        <View style={{ backgroundColor: "#fff3cd", padding: 8, alignItems: "center" }}>
+          <Text style={{ color: "#856404", fontSize: 13 }}>אין חיבור לאינטרנט — מציג רשימה שמורה</Text>
+        </View>
+      )}
       <View style={styles.summaryBar}>
         <Text style={styles.summaryText}>{checkedCount} מתוך {rows.length} פריטים נבחרו</Text>
       </View>
@@ -374,31 +450,6 @@ export default function PurchaseScreen() {
         }
         renderItem={({ item: row, index }) => (
           <View style={[styles.card, row.isExtra && styles.cardExtra, row.item.is_temporary && styles.cardTemp, row.checked && styles.cardDone]}>
-            {/* Top label row */}
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <Text style={row.item.is_temporary ? styles.tempLabel : row.item.purchase_reason === "overdue" ? styles.overdueLabel : styles.itemLabel}>
-                {row.item.is_temporary ? "התווסף ידנית כזמני" : row.isExtra ? "התווסף ידנית מהמלאי" : row.item.purchase_reason === "overdue" ? "לא נרכש זמן רב" : "אוטומטית עקב חוסרים"}
-              </Text>
-              <View style={styles.left}>
-                {(row.isExtra || row.item.is_temporary) ? (
-                  <TouchableOpacity
-                    style={{ width: 28, height: 28, alignItems: "center", justifyContent: "center" }}
-                    onPress={() => {
-                      const itemType = row.item.is_temporary ? "temporary" : "manual";
-                      deleteInventoryItem(row.item.item_name, itemType).catch(() => {});
-                      removeFromShoppingList(row.item.item_name).catch(() => {});
-                      setRows((prev) => prev.filter((_, i) => i !== index));
-                    }}
-                  >
-                    <Text style={styles.removeBtnText}>✕</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <View style={{ width: 28, height: 28, alignItems: "center", justifyContent: "center" }}>
-                    <Text style={styles.removeBtnDisabled}>✕</Text>
-                  </View>
-                )}
-              </View>
-            </View>
             {/* Item name */}
             <Text style={[styles.name, row.checked && styles.nameDone]}>
               {row.item.item_name} {getItemIcon(row.item.item_name)}
@@ -415,6 +466,12 @@ export default function PurchaseScreen() {
                 style={[styles.qtyInput, row.checked && styles.qtyDone]}
                 value={row.qty}
                 onChangeText={(v) => setQty(index, v)}
+                onBlur={() => {
+                  const val = parseInt(row.qty);
+                  if (!isNaN(val) && val >= 1 && val !== row.item.quantity_to_buy) {
+                    overrideShoppingListQty(row.item.item_name, val).catch(() => {});
+                  }
+                }}
                 keyboardType="numeric"
                 editable={!row.checked}
                 selectTextOnFocus
@@ -467,15 +524,9 @@ export default function PurchaseScreen() {
                 {transcript.length > 0 && <Text style={styles.voiceTranscript}>{transcript}</Text>}
                 {voiceError && <Text style={[styles.voiceTranscript, { color: "#c62828" }]}>{voiceError}</Text>}
                 <View style={{ flexDirection: "row", gap: 8 }}>
-                  {isRecording ? (
-                    <TouchableOpacity style={[styles.modalAddBtn, { flex: 1, backgroundColor: "#e53935" }]} onPress={stopRecording}>
-                      <Text style={styles.modalAddBtnText}>עצור</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity style={[styles.modalCancelBtn, { flex: 1 }]} onPress={closeVoiceModal}>
-                      <Text style={styles.modalCancelText}>ביטול</Text>
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity style={[styles.modalAddBtn, { flex: 1, backgroundColor: "#ffebee", marginBottom: 0 }]} onPress={closeVoiceModal}>
+                    <Text style={[styles.modalAddBtnText, { color: "#c62828" }]}>ביטול</Text>
+                  </TouchableOpacity>
                 </View>
               </>
             )}
@@ -484,26 +535,39 @@ export default function PurchaseScreen() {
               <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
                 {voiceResult.found.length > 0 && (
                   <>
-                    <Text style={styles.voiceSectionTitle}>✅ נמצאו ({voiceResult.found.length})</Text>
-                    {voiceResult.found.map((item) => (
-                      <View key={item.matched} style={styles.voiceResultRow}>
-                        <Text style={styles.voiceResultName}>{item.matched} {getItemIcon(item.matched)}</Text>
-                      </View>
-                    ))}
+                    <Text style={styles.voiceSectionTitle}>נמצאו במלאי</Text>
+                    {voiceResult.found.filter((item, idx, arr) => arr.findIndex((x) => x.matched === item.matched) === idx).map((item) => {
+                      const alreadyInList = rows.some((r) => r.item.item_name === item.matched);
+                      const checked = checkedFound.has(item.matched);
+                      return (
+                        <TouchableOpacity
+                          key={item.matched}
+                          style={styles.voiceResultRow}
+                          onPress={() => {
+                            if (alreadyInList) return;
+                            setCheckedFound((prev) => { const next = new Set(prev); checked ? next.delete(item.matched) : next.add(item.matched); return next; });
+                          }}
+                        >
+                          {alreadyInList
+                            ? <Ionicons name="checkmark-circle" size={22} color="#388e3c" style={{ marginLeft: 4 }} />
+                            : <Ionicons name={checked ? "checkbox" : "square-outline"} size={22} color={BLUE} style={{ marginLeft: 4 }} />
+                          }
+                          <Text style={[styles.voiceResultName, { flex: 1, marginRight: 8 }]}>{item.matched} {getItemIcon(item.matched)}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </>
                 )}
                 {voiceResult.not_found.length > 0 && (
                   <>
-                    <Text style={[styles.voiceSectionTitle, { color: "#e65100" }]}>❓ הוסף כפריט זמני ({voiceResult.not_found.length})</Text>
+                    <Text style={[styles.voiceSectionTitle, { color: "#e65100", marginTop: 14 }]}>לא נמצאו — הוסף כזמני</Text>
                     {voiceResult.not_found.map((name) => {
                       const checked = checkedNotFound.has(name);
                       return (
                         <TouchableOpacity key={name} style={styles.voiceResultRow} onPress={() => setCheckedNotFound((prev) => {
-                          const next = new Set(prev);
-                          checked ? next.delete(name) : next.add(name);
-                          return next;
+                          const next = new Set(prev); checked ? next.delete(name) : next.add(name); return next;
                         })}>
-                          <Ionicons name={checked ? "checkbox" : "square-outline"} size={22} color={BLUE} style={{ marginLeft: 4 }} />
+                          <Ionicons name={checked ? "checkbox" : "square-outline"} size={22} color="#e65100" style={{ marginLeft: 4 }} />
                           <Text style={[styles.voiceResultName, { flex: 1, marginRight: 8 }]}>{name}</Text>
                         </TouchableOpacity>
                       );
@@ -511,17 +575,17 @@ export default function PurchaseScreen() {
                   </>
                 )}
                 {voiceResult.found.length === 0 && voiceResult.not_found.length === 0 && (
-                  <Text style={styles.voiceStatusText}>לא זוהו פריטים. נסה שוב.</Text>
+                  <Text style={[styles.voiceStatusText, { marginVertical: 16 }]}>לא זוהו פריטים. נסה שוב.</Text>
                 )}
-                <View style={{ flexDirection: "row", gap: 8, marginTop: 12, alignItems: "center" }}>
-                  {(voiceResult.found.length > 0 || checkedNotFound.size > 0) && (
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 14, alignItems: "center" }}>
+                  <View style={{ flex: 1, flexDirection: "row", gap: 8 }}>
                     <TouchableOpacity style={[styles.modalAddBtn, { flex: 1, marginBottom: 0 }]} onPress={handleAddAllFound}>
                       <Text style={styles.modalAddBtnText}>הוסף</Text>
                     </TouchableOpacity>
-                  )}
-                  <TouchableOpacity style={[styles.modalCancelBtn, { flex: 1 }]} onPress={closeVoiceModal}>
-                    <Text style={styles.modalCancelText}>סגור</Text>
-                  </TouchableOpacity>
+                    <TouchableOpacity style={[styles.modalCancelBtn, { flex: 1 }]} onPress={closeVoiceModal}>
+                      <Text style={styles.modalCancelText}>סגור</Text>
+                    </TouchableOpacity>
+                  </View>
                   <TouchableOpacity style={styles.fabButtonMic} onPress={handleReRecord}>
                     <Ionicons name="mic" size={20} color="#fff" />
                   </TouchableOpacity>
@@ -703,10 +767,10 @@ const styles = StyleSheet.create({
   modalAddBtn: { backgroundColor: BLUE, paddingVertical: 12, borderRadius: 10, alignItems: "center", marginBottom: 8 },
   modalAddBtnTemp: { backgroundColor: BLUE, paddingVertical: 12, borderRadius: 10, alignItems: "center", marginBottom: 8 },
   modalAddBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-  modalCancelBtn: { paddingVertical: 10, paddingHorizontal: 24, borderRadius: 10, alignItems: "center", backgroundColor: "#ffebee", borderWidth: 1, borderColor: "#ffcdd2" },
+  modalCancelBtn: { paddingVertical: 12, paddingHorizontal: 8, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "#ffebee", borderWidth: 1, borderColor: "#ffcdd2" },
   modalCloseBtn: { position: "absolute", top: 12, right: 12, width: 28, height: 28, alignItems: "center", justifyContent: "center", zIndex: 10 },
   modalCloseBtnText: { fontSize: 16, color: "#888", fontWeight: "700" },
-  modalCancelText: { color: "#c62828", fontSize: 15, width: 50 },
+  modalCancelText: { color: "#c62828", fontSize: 15, textAlign: "center", fontWeight: "700" },
   modalTitleTemp: { fontSize: 18, fontWeight: "700", textAlign: "center", marginBottom: 4 },
   modalSubTemp: { fontSize: 12, color: "#aaa", textAlign: "center", marginBottom: 16 },
   removeBtn: { marginLeft: 6, paddingHorizontal: 4, alignItems: "center", justifyContent: "center" },

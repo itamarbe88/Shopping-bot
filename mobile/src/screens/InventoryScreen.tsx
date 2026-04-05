@@ -18,8 +18,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import { Ionicons } from "@expo/vector-icons";
-import { InventoryItem, fetchInventory, deleteInventoryItem, upsertInventoryItem, uploadItemImage, fetchItemImage, deleteItemImage, fetchItemsWithImages } from "../api";
+import { InventoryItem, fetchInventory, deleteInventoryItem, upsertInventoryItem, uploadItemImage, fetchItemImage, deleteItemImage, fetchItemsWithImages, setItemOnHold } from "../api";
 import { getItemIcon } from "../icons";
+import { useVoice } from "../hooks/useVoice";
 
 const BLUE = "#0288D1";
 
@@ -47,6 +48,25 @@ export default function InventoryScreen() {
   const [newDays, setNewDays] = useState("");
   const [newDate, setNewDate] = useState("");
   const [adding, setAdding] = useState(false);
+
+  const { isRecording, transcript, startRecording, stopRecording } = useVoice();
+
+  useEffect(() => {
+    if (transcript.trim()) {
+      setSearchInput(transcript);
+      setSearchQuery(transcript);
+    }
+  }, [transcript]);
+
+  const handleMicPress = async () => {
+    if (isRecording) {
+      await stopRecording();
+    } else {
+      setSearchInput("");
+      setSearchQuery("");
+      await startRecording();
+    }
+  };
 
   const [addImageBase64, setAddImageBase64] = useState<string | null>(null);
   const [editImageBase64, setEditImageBase64] = useState<string | null>(null);
@@ -101,7 +121,7 @@ export default function InventoryScreen() {
     const displayCount = items
       .filter((i) => {
         if (showShortagesOnly) return i.type === "" && parseFloat(i.current_quantity) < parseFloat(i.desired_quantity);
-        return i.type === "";
+        return i.type === "" || i.type === "on_hold";
       })
       .filter((i) => {
         if (!searchQuery.trim()) return true;
@@ -110,7 +130,7 @@ export default function InventoryScreen() {
         catch { return i.item_name.includes(searchQuery.trim()); }
       }).length;
     navigation.setOptions({
-      headerTitle: `מלאי הבית (${displayCount})`,
+      headerTitle: `מלאי (${displayCount})`,
       headerLeft: () => (
         <TouchableOpacity onPress={load} style={{ marginHorizontal: 16, padding: 6 }}>
           <Text style={{ color: "#fff", fontSize: 28 }}>↻</Text>
@@ -198,6 +218,18 @@ export default function InventoryScreen() {
       Alert.alert("שגיאה", "לא ניתן לשמור.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleToggleHold = async () => {
+    if (!editItem) return;
+    const newHold = editItem.type !== "on_hold";
+    try {
+      await setItemOnHold(editItem.item_name, newHold);
+      setEditItem(null);
+      load();
+    } catch {
+      Alert.alert("שגיאה", "לא ניתן לעדכן סטטוס.");
     }
   };
 
@@ -300,7 +332,7 @@ export default function InventoryScreen() {
       if (showShortagesOnly) {
         return item.type == "" && parseFloat(item.current_quantity) < parseFloat(item.desired_quantity);
       }
-      return item.type == "";
+      return item.type == "" || item.type == "on_hold";
     })
     .filter((item) => {
       if (!searchQuery.trim()) return true;
@@ -359,15 +391,17 @@ export default function InventoryScreen() {
     const desired = parseFloat(item.desired_quantity);
     const needsRestock = current < desired;
     const isManual = item.type === "manual";
-    const isOverdue = !needsRestock && !isManual && !!item.next_purchase_date &&
+    const isOnHold = item.type === "on_hold";
+    const isOverdue = !needsRestock && !isManual && !isOnHold && !!item.next_purchase_date &&
       item.next_purchase_date !== "unknown" && item.next_purchase_date !== "needed now" &&
       new Date(item.next_purchase_date) <= new Date();
 
     return (
       <TouchableOpacity onPress={() => openEdit(item)} activeOpacity={0.75}>
-        <View style={[styles.card, isManual ? styles.cardManual : needsRestock ? styles.cardAlert : isOverdue && styles.cardOverdue]}>
+        <View style={[styles.card, isOnHold ? styles.cardOnHold : isManual ? styles.cardManual : needsRestock ? styles.cardAlert : isOverdue && styles.cardOverdue]}>
           <View style={styles.row}>
             {highlightName(item.item_name)}
+            {isOnHold && <Ionicons name="warning-outline" size={16} color="#f57c00" style={{ marginRight: 4 }} />}
             {itemsWithImages.has(item.item_name) && (
               <TouchableOpacity
                 onPress={(e) => { e.stopPropagation(); fetchItemImage(item.item_name).then(setViewImageBase64).catch(() => {}); }}
@@ -377,13 +411,13 @@ export default function InventoryScreen() {
                 <Ionicons name="image-outline" size={18} color="#888" />
               </TouchableOpacity>
             )}
-            <View style={[styles.badge, isManual ? styles.badgeManual : needsRestock ? styles.badgeAlert : isOverdue ? styles.badgeOverdue : styles.badgeOk]}>
-              <Text style={[styles.badgeText, isManual ? styles.badgeTextManual : needsRestock ? styles.badgeTextAlert : isOverdue ? styles.badgeTextOverdue : styles.badgeTextOk]}>
-                {isManual ? "נוסף ידנית לרשימה" : needsRestock ? "נדרשת רכישה" : isOverdue ? "לא נרכש זמן רב" : "תקין"}
+            <View style={[styles.badge, isOnHold ? styles.badgeOnHold : isManual ? styles.badgeManual : needsRestock ? styles.badgeAlert : isOverdue ? styles.badgeOverdue : styles.badgeOk]}>
+              <Text style={[styles.badgeText, isOnHold ? styles.badgeTextOnHold : isManual ? styles.badgeTextManual : needsRestock ? styles.badgeTextAlert : isOverdue ? styles.badgeTextOverdue : styles.badgeTextOk]}>
+                {isOnHold ? "זמנית לא במלאי" : isManual ? "נוסף ידנית לרשימה" : needsRestock ? "נדרשת רכישה" : isOverdue ? "לא נרכש זמן רב" : "תקין"}
               </Text>
             </View>
           </View>
-          {!isManual && (
+          {!isManual && !isOnHold && (
             <View style={styles.detailRow}>
               <Text style={[styles.detailCurrent, needsRestock && styles.detailAlert]}>
                 יש: {item.current_quantity}
@@ -395,10 +429,14 @@ export default function InventoryScreen() {
           )}
           {isManual ? (
             <Text style={styles.date}>{`כמות: ${desired}`}</Text>
-          ) : (
+          ) : isOnHold ? null : (
             <View style={styles.dateRow}>
               <Text style={styles.date}>
-                {needsRestock ? "⚠️ יש לרכוש בהקדם" : `רכישה הבאה בעוד ${calculateDaysAgo(item.next_purchase_date)} ימים`}
+                {needsRestock || item.next_purchase_date === "needed now"
+                  ? "⚠️ יש לרכוש בהקדם"
+                  : !item.next_purchase_date || item.next_purchase_date === "unknown"
+                  ? ""
+                  : `רכישה הבאה בעוד ${calculateDaysAgo(item.next_purchase_date)} ימים`}
               </Text>
               {!!item.last_purchased_date && (
                 <Text style={styles.dateRight}>נרכש לאחרונה לפני {calculateDaysAgo(item.last_purchased_date)} ימים</Text>
@@ -413,19 +451,24 @@ export default function InventoryScreen() {
   return (
     <View style={{ flex: 1 }}>
       <View style={styles.searchBar}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="חיפוש..."
-          placeholderTextColor="#aaa"
-          value={searchInput}
-          onChangeText={onSearchChange}
-          textAlign="right"
-        />
-        {searchInput.length > 0 && (
-          <TouchableOpacity style={styles.searchClear} onPress={() => { setSearchInput(""); setSearchQuery(""); }}>
-            <Text style={styles.searchClearText}>✕</Text>
-          </TouchableOpacity>
-        )}
+        <View style={styles.searchInputWrapper}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="חיפוש..."
+            placeholderTextColor="#aaa"
+            value={searchInput}
+            onChangeText={onSearchChange}
+            textAlign="right"
+          />
+          {searchInput.length > 0 && (
+            <TouchableOpacity style={styles.searchClear} onPress={() => { setSearchInput(""); setSearchQuery(""); }}>
+              <Ionicons name="close-circle" size={18} color="#aaa" />
+            </TouchableOpacity>
+          )}
+        </View>
+        <TouchableOpacity style={[styles.micBtn, isRecording && styles.micBtnActive]} onPress={handleMicPress}>
+          <Ionicons name={isRecording ? "stop" : "mic"} size={18} color={isRecording ? "#fff" : "#0288D1"} />
+        </TouchableOpacity>
       </View>
       <FlatList
         data={filteredItems}
@@ -526,7 +569,7 @@ export default function InventoryScreen() {
 
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>נרכש לאחרונה {editDate ? `לפני ${calculateDaysAgo(editDate)} ימים` : "—"}</Text>
-              <Text style={styles.infoLabel}>רכישה הבאה {editItem?.next_purchase_date ? `בעוד ${calculateDaysAgo(editItem.next_purchase_date)} ימים` : "—"}</Text>
+              <Text style={styles.infoLabel}>{editItem?.next_purchase_date && editItem.next_purchase_date !== "needed now" && editItem.next_purchase_date !== "unknown" ? `רכישה הבאה בעוד ${calculateDaysAgo(editItem.next_purchase_date)} ימים` : "יש לרכוש בהקדם"}</Text>
               <Text style={styles.infoLabel}>חסר {Math.max(0, (parseFloat(editDesired) || 0) - (parseFloat(editCurrent) || 0))} יחידות</Text>
             </View>
 
@@ -554,9 +597,14 @@ export default function InventoryScreen() {
                 <Text style={styles.cancelBtnText}>ביטול</Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity style={[styles.deleteBtn, { marginTop: 8 }]} onPress={handleDelete}>
-              <Text style={styles.deleteBtnText}>מחק פריט</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+              <TouchableOpacity style={[styles.holdBtn, { flex: 1 }]} onPress={handleToggleHold}>
+                <Text style={styles.holdBtnText}>{editItem?.type === "on_hold" ? "החזר למלאי" : "השהה מהמלאי"}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.deleteBtn, { flex: 1 }]} onPress={handleDelete}>
+                <Text style={styles.deleteBtnText}>מחק מהמלאי</Text>
+              </TouchableOpacity>
+            </View>
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
@@ -567,9 +615,12 @@ export default function InventoryScreen() {
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   searchBar: { backgroundColor: "#fff", paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#e1f5fe", flexDirection: "row", alignItems: "center" },
-  searchInput: { flex: 1, borderWidth: 1.5, borderColor: "#90caf9", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 15, backgroundColor: "#f8fbff", color: "#1a1a1a" },
-  searchClear: { marginLeft: 8, width: 28, height: 28, borderRadius: 14, backgroundColor: "#e0e0e0", alignItems: "center", justifyContent: "center" },
+  searchInputWrapper: { flex: 1, flexDirection: "row", alignItems: "center", borderWidth: 1.5, borderColor: "#90caf9", borderRadius: 10, backgroundColor: "#f8fbff" },
+  searchInput: { flex: 1, paddingHorizontal: 12, paddingVertical: 8, fontSize: 15, color: "#1a1a1a" },
+  searchClear: { paddingHorizontal: 8, justifyContent: "center", alignItems: "center" },
   searchClearText: { color: "#555", fontSize: 13, fontWeight: "700" },
+  micBtn: { marginLeft: 8, width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: "#90caf9", alignItems: "center", justifyContent: "center", backgroundColor: "#f8fbff" },
+  micBtnActive: { backgroundColor: "#e53935", borderColor: "#e53935" },
   error: { color: "#c62828", fontSize: 16, textAlign: "center", padding: 20 },
   list: { padding: 12, paddingBottom: 90 },
   card: {
@@ -587,8 +638,13 @@ const styles = StyleSheet.create({
   cardAlert: { borderRightColor: "#e53935" },
   cardOverdue: { borderRightColor: "#f57c00" },
   cardManual: { borderRightColor: BLUE, backgroundColor: "#e8f4fd" },
+  cardOnHold: { borderRightColor: "#bdbdbd", backgroundColor: "#f5f5f5" },
   badgeManual: { backgroundColor: "#dbeeff" },
   badgeTextManual: { color: BLUE },
+  badgeOnHold: { backgroundColor: "#eeeeee" },
+  badgeTextOnHold: { color: "#757575" },
+  holdBtn: { backgroundColor: "#f57c00", paddingVertical: 12, borderRadius: 10, alignItems: "center" },
+  holdBtnText: { color: "#fff", fontSize: 15, fontWeight: "600" },
   row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
   itemName: { fontSize: 17, fontWeight: "700", color: "#1a1a1a", textAlign: "left", flex: 1, marginLeft: 4 },
   badge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20, marginLeft: 8 },

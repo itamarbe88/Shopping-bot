@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { PermissionsAndroid, Platform } from "react-native";
+import { useIsFocused } from "@react-navigation/native";
 import Voice, {
   SpeechErrorEvent,
   SpeechResultsEvent,
@@ -40,10 +41,11 @@ export function useVoice({
   const [error, setError] = useState<string | null>(null);
   const minConfidenceRef = useRef(minConfidence);
   minConfidenceRef.current = minConfidence;
+  const isFocused = useIsFocused();
 
   useEffect(() => {
-    if (!Voice) {
-      setError("מודול הקול אינו זמין — נסה לבנות מחדש את האפליקציה");
+    if (!isFocused || !Voice) {
+      if (!Voice) setError("מודול הקול אינו זמין — נסה לבנות מחדש את האפליקציה");
       return;
     }
 
@@ -76,9 +78,9 @@ export function useVoice({
     };
 
     return () => {
-      Voice.destroy().then(() => Voice.removeAllListeners());
+      Voice.removeAllListeners();
     };
-  }, []);
+  }, [isFocused]);
 
   const startRecording = async () => {
     try {

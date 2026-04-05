@@ -14,14 +14,22 @@ async function authHeaders(extra: Record<string, string> = {}): Promise<Record<s
   return headers;
 }
 
+const REQUEST_TIMEOUT_MS = 10000;
+
 async function apiFetch(url: string, options?: RequestInit): Promise<Response> {
-  const res = await fetch(url, options);
-  if (res.status === 401) {
-    await AsyncStorage.multiRemove(["auth_token", "auth_user"]);
-    _onUnauthorized?.();
-    throw new Error("Session expired. Please sign in again.");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    if (res.status === 401) {
+      await AsyncStorage.multiRemove(["auth_token", "auth_user"]);
+      _onUnauthorized?.();
+      throw new Error("Session expired. Please sign in again.");
+    }
+    return res;
+  } finally {
+    clearTimeout(timer);
   }
-  return res;
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -72,10 +80,29 @@ export async function fetchShoppingList(dryRun: boolean): Promise<ShoppingListRe
   return res.json();
 }
 
-export async function fetchLastShoppingList(): Promise<ShoppingListResponse> {
-  const res = await apiFetch(`${BASE_URL}/shopping-list/last`, { headers: await authHeaders() });
-  if (!res.ok) throw new Error("Failed to fetch last shopping list");
-  return res.json();
+const CACHED_SHOPPING_LIST_KEY = "cached_shopping_list";
+const CACHED_SHOPPING_LIST_TS_KEY = "cached_shopping_list_ts";
+const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+export async function fetchLastShoppingList(): Promise<ShoppingListResponse & { offline?: boolean; cacheExpired?: boolean }> {
+  try {
+    const res = await apiFetch(`${BASE_URL}/shopping-list/last`, { headers: await authHeaders() });
+    if (!res.ok) throw new Error("Failed to fetch last shopping list");
+    const data: ShoppingListResponse = await res.json();
+    if (data.shopping_list?.length) {
+      await AsyncStorage.setItem(CACHED_SHOPPING_LIST_KEY, JSON.stringify(data));
+      await AsyncStorage.setItem(CACHED_SHOPPING_LIST_TS_KEY, String(Date.now()));
+    }
+    return data;
+  } catch (err: any) {
+    if (err?.message?.includes("Session expired")) throw err;
+    // Any other error — serve from cache
+    const [cached, tsStr] = await AsyncStorage.multiGet([CACHED_SHOPPING_LIST_KEY, CACHED_SHOPPING_LIST_TS_KEY])
+      .then((pairs) => pairs.map((p) => p[1]));
+    const data = cached ? JSON.parse(cached) as ShoppingListResponse : { shopping_list: [], dry_run: false };
+    const cacheAge = tsStr ? Date.now() - parseInt(tsStr) : Infinity;
+    return { ...data, offline: true, cacheExpired: cacheAge > CACHE_MAX_AGE_MS };
+  }
 }
 
 export async function addTemporaryItem(item_name: string, quantity: number): Promise<void> {
@@ -100,6 +127,14 @@ export async function removeFromShoppingList(item_name: string): Promise<void> {
   await apiFetch(`${BASE_URL}/shopping-list/item/${encodeURIComponent(item_name)}`, {
     method: "DELETE",
     headers: await authHeaders(),
+  });
+}
+
+export async function overrideShoppingListQty(item_name: string, quantity: number): Promise<void> {
+  await apiFetch(`${BASE_URL}/shopping-list/item/${encodeURIComponent(item_name)}/qty`, {
+    method: "PATCH",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify({ quantity }),
   });
 }
 
@@ -150,6 +185,15 @@ export async function processVoiceItems(speech_text: string): Promise<VoiceRespo
   });
   if (!res.ok) throw new Error("Failed to process voice input");
   return res.json();
+}
+
+export async function setItemOnHold(item_name: string, on_hold: boolean): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/inventory/item/${encodeURIComponent(item_name)}/hold`, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify({ on_hold }),
+  });
+  if (!res.ok) throw new Error("Failed to update hold status");
 }
 
 export async function deleteInventoryItem(item_name: string, type?: string): Promise<void> {
@@ -234,4 +278,15 @@ export async function joinHousehold(code: string): Promise<string> {
   if (!res.ok) throw new Error("Failed to join household");
   const data = await res.json();
   return data.household_id;
+}
+
+export interface OnboardingItem {
+  item_name: string;
+  category: string;
+}
+
+export async function fetchOnboardingTemplate(): Promise<OnboardingItem[]> {
+  const res = await apiFetch(`${BASE_URL}/onboarding/template`, { headers: await authHeaders() });
+  if (!res.ok) return [];
+  return res.json();
 }

@@ -153,18 +153,11 @@ def create_household(user_id: str) -> str:
 
 def join_household(user_id: str, household_id: str) -> bool:
     household_id = household_id.upper().strip()
-    # A household exists if its inventory path exists OR if the directory was just created
-    # We check by seeing if any member maps to this household, or inventory exists
-    # Simplest: just trust the code and create the member mapping
-    # But we need some validation — check if inventory exists or it was just generated
+    # A household exists if its inventory OR its placeholder directory exists.
+    # New households may not have any items yet, so we check both.
     inv = _inventory_path(household_id)
-    member_data = _read(_member_path(user_id))
-    # Allow joining if inventory exists or we accept any 6-char code from known households
-    # Check: does at least the households/<id>/ prefix have any object?
-    if not _exists(inv):
-        # No inventory yet — could be a brand new household with no items
-        # We'll allow joining if the code length is valid (trusting the creator)
-        # To be safe, require inventory to exist (creator must have opened the app)
+    placeholder = f"households/{household_id}/"
+    if not _exists(inv) and not _exists(placeholder):
         return False
     _write(_member_path(user_id), json.dumps({"household_id": household_id}).encode())
     return True
@@ -227,13 +220,12 @@ def get_inventory(household_id: str) -> list[dict]:
 def upsert_item(household_id: str, item_name: str, unit: str, current_quantity: int,
                 desired_quantity: int, days_until_restock: int,
                 last_purchased_date: str | None = None) -> dict:
-    today = date.today().isoformat()
     record = {
         "item_name": item_name, "unit": unit or "",
         "current_quantity": str(int(current_quantity)),
         "desired_quantity": str(int(desired_quantity)),
         "days_until_restock": str(days_until_restock),
-        "last_purchased_date": last_purchased_date or today,
+        "last_purchased_date": last_purchased_date or "",
     }
     items = _load(household_id)
     for i, item in enumerate(items):
@@ -268,6 +260,8 @@ def generate_shopping_list(household_id: str, dry_run: bool = False) -> dict:
 
     for item in items:
         item_type = item.get("type", "")
+        if item_type == "on_hold":
+            continue
         is_temporary = item_type == "temporary"
         is_manual = item_type == "manual"
 
@@ -325,6 +319,13 @@ def generate_shopping_list(household_id: str, dry_run: bool = False) -> dict:
             pass
         shopping_list.append(entry)
 
+    if not dry_run:
+        existing_overrides = {i["item_name"]: i["quantity_to_buy"] for i in read_last_list(household_id)}
+        for item in shopping_list:
+            if item["item_name"] in existing_overrides:
+                item["quantity_to_buy"] = existing_overrides[item["item_name"]]
+        write_last_list(household_id, shopping_list)
+
     return {"shopping_list": shopping_list, "dry_run": dry_run}
 
 
@@ -376,6 +377,19 @@ def delete_last_list(household_id: str) -> None:
     _delete(_last_list_path(household_id))
 
 
+
+# ── Onboarding template ───────────────────────────────────────────────────────
+
+ONBOARDING_TEMPLATE_PATH = "templates/Onboarding.csv"
+
+def get_onboarding_template() -> list[dict]:
+    data = _read(ONBOARDING_TEMPLATE_PATH)
+    if data is None:
+        return []
+    reader = csv.DictReader(io.StringIO(data.decode("utf-8-sig")))
+    return [{"item_name": row["item_name"].strip(), "category": row["category"].strip()} for row in reader if row.get("item_name", "").strip()]
+
+
 # ── Voice inventory ─────────────────────────────────────────────────────────────
 
 def process_voice_items(household_id: str, speech_text: str) -> dict:
@@ -398,16 +412,17 @@ def process_voice_items(household_id: str, speech_text: str) -> dict:
         # Contains matching in both directions (e.g. "חלב" matches "חלב 3%" and vice versa)
         matches = [
             inv for inv in inventory
-            if spoken_clean in inv["item_name"] or inv["item_name"] in spoken_clean
+            if inv.get("type", "") != "on_hold"
+            and (spoken_clean in inv["item_name"] or inv["item_name"] in spoken_clean)
         ]
         if matches:
-            best = min(matches, key=lambda x: abs(len(x["item_name"]) - len(spoken_clean)))
-            found.append({
-                "spoken": spoken_clean,
-                "matched": best["item_name"],
-                "current_quantity": best.get("current_quantity", "0"),
-                "desired_quantity": best.get("desired_quantity", "1"),
-            })
+            for match in matches:
+                found.append({
+                    "spoken": spoken_clean,
+                    "matched": match["item_name"],
+                    "current_quantity": match.get("current_quantity", "0"),
+                    "desired_quantity": match.get("desired_quantity", "1"),
+                })
         else:
             not_found.append(spoken_clean)
 
@@ -417,3 +432,13 @@ def process_voice_items(household_id: str, speech_text: str) -> dict:
         "raw_text": speech_text,
         "parsed_items": parsed_items,
     }
+
+
+def set_item_on_hold(household_id: str, item_name: str, on_hold: bool) -> dict:
+    items = _load(household_id)
+    for item in items:
+        if item["item_name"] == item_name:
+            item["type"] = "on_hold" if on_hold else ""
+            _save(items, household_id)
+            return {"success": True}
+    return {"success": False, "message": f"Item '{item_name}' not found."}
