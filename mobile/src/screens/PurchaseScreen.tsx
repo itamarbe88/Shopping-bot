@@ -136,11 +136,14 @@ export default function PurchaseScreen() {
 
   useEffect(() => {
     if (!rows.length) return;
-    const names = rows.map((r) => r.item.item_name);
-    fetchItemCategories(names).then((cats) => {
-      if (Object.keys(cats).length) setItemCategories(cats);
+    const uncategorized = rows
+      .map((r) => r.item.item_name)
+      .filter((name) => !itemCategories[name]);
+    if (!uncategorized.length) return;
+    fetchItemCategories(uncategorized).then((cats) => {
+      if (Object.keys(cats).length) setItemCategories((prev) => ({ ...prev, ...cats }));
     }).catch(() => {});
-  }, [hasGenerated]);
+  }, [rows.length]);
 
   // ── Item images ────────────────────────────────────────────────────────────
   const [itemsWithImages, setItemsWithImages] = useState<Set<string>>(new Set());
