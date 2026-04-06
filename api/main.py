@@ -179,6 +179,13 @@ def remove_item(item_name: str, item_type: str | None = None, hh: str = Depends(
 
 # ── Shopping list ──────────────────────────────────────────────────────────────
 
+@app.get("/shopping-list/categories")
+def get_item_categories(items: str, hh: str = Depends(get_hh_id)):
+    """Return { item_name: category } for a comma-separated list of item names."""
+    item_names = [n.strip() for n in items.split(",") if n.strip()]
+    return get_categories_for_items(item_names)
+
+
 @app.get("/shopping-list/last")
 def last_shopping_list(hh: str = Depends(get_hh_id)):
     cached_items = read_last_list(hh)
@@ -351,14 +358,6 @@ def add_manual_item(body: TempItemRequest, hh: str = Depends(get_hh_id)):
     _save(items, hh)
     return {"success": True, "item": body.item_name, "quantity": body.quantity}
 
-
-# ── Item categories ──────────────────────────────────────────────────────────────
-
-@app.get("/shopping-list/categories")
-def get_item_categories(items: str, hh: str = Depends(get_hh_id)):
-    """Return { item_name: category } for a comma-separated list of item names."""
-    item_names = [n.strip() for n in items.split(",") if n.strip()]
-    return get_categories_for_items(item_names)
 
 
 @app.post("/admin/categorize-new-items")
