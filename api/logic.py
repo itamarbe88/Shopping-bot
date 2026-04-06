@@ -537,6 +537,7 @@ def categorize_new_items() -> dict:
 
     # From onboarding template
     template = get_onboarding_template()
+    print(f"[CATEGORIZE] Onboarding template items: {len(template)}")
     for row in template:
         all_items.add(row["item_name"])
 
@@ -549,11 +550,12 @@ def categorize_new_items() -> dict:
                 parts = blob.name.split("/")
                 if len(parts) >= 2:
                     household_ids.add(parts[1])
+            print(f"[CATEGORIZE] Found {len(household_ids)} households")
             for hh_id in household_ids:
                 for item in _load(hh_id):
                     all_items.add(item["item_name"])
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[CATEGORIZE] GCS scan error: {e}")
     else:
         # Local dev: scan data/households/
         households_dir = Path(__file__).parent.parent / "data" / "households"
@@ -570,6 +572,7 @@ def categorize_new_items() -> dict:
         and name not in categories
     ]
 
+    print(f"[CATEGORIZE] Total items: {len(all_items)}, new to categorize: {len(new_items)}")
     if not new_items:
         return {"added": 0, "total": len(categories)}
 
