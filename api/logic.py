@@ -494,34 +494,48 @@ def _categorize_with_claude(item_names: list[str]) -> dict:
     """Call Claude API to categorize a batch of Hebrew item names. Returns { item_name: category }."""
     if not ANTHROPIC_API_KEY:
         return {}
+    if not item_names:
+        return {}
+
+    # Process in chunks of 50 to avoid token limits
+    CHUNK_SIZE = 50
+    result = {}
     try:
         import anthropic
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         categories_list = "\n".join(f"- {c}" for c in HEBREW_CATEGORIES)
-        items_list = "\n".join(item_names)
-        message = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=1024,
-            messages=[{
-                "role": "user",
-                "content": (
-                    f"אתה עוזר לסווג פריטי מכולת לקטגוריות של סופרמרקט.\n"
-                    f"הקטגוריות האפשריות הן:\n{categories_list}\n\n"
-                    f"סווג כל פריט מהרשימה הבאה לאחת מהקטגוריות.\n"
-                    f"החזר JSON בלבד בפורמט: {{\"שם פריט\": \"קטגוריה\", ...}}\n\n"
-                    f"פריטים לסיווג:\n{items_list}"
-                ),
-            }],
-        )
-        text = message.content[0].text.strip()
-        # Strip markdown code fences if present
-        if text.startswith("```"):
-            text = text.split("```")[1]
-            if text.startswith("json"):
-                text = text[4:]
-        return json.loads(text.strip())
-    except Exception:
-        return {}
+
+        for i in range(0, len(item_names), CHUNK_SIZE):
+            chunk = item_names[i:i + CHUNK_SIZE]
+            items_list = "\n".join(chunk)
+            try:
+                message = client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=2048,
+                    messages=[{
+                        "role": "user",
+                        "content": (
+                            f"אתה עוזר לסווג פריטי מכולת לקטגוריות של סופרמרקט.\n"
+                            f"הקטגוריות האפשריות הן:\n{categories_list}\n\n"
+                            f"סווג כל פריט מהרשימה הבאה לאחת מהקטגוריות.\n"
+                            f"החזר JSON בלבד בפורמט: {{\"שם פריט\": \"קטגוריה\", ...}}\n\n"
+                            f"פריטים לסיווג:\n{items_list}"
+                        ),
+                    }],
+                )
+                text = message.content[0].text.strip()
+                if text.startswith("```"):
+                    text = text.split("```")[1]
+                    if text.startswith("json"):
+                        text = text[4:]
+                chunk_result = json.loads(text.strip())
+                result.update(chunk_result)
+                print(f"[CATEGORIZE] Chunk {i//CHUNK_SIZE + 1}: categorized {len(chunk_result)} items")
+            except Exception as e:
+                print(f"[CATEGORIZE] Chunk {i//CHUNK_SIZE + 1} failed: {type(e).__name__}: {e}")
+    except Exception as e:
+        print(f"[CATEGORIZE] Claude client error: {type(e).__name__}: {e}")
+    return result
 
 
 def categorize_new_items() -> dict:
