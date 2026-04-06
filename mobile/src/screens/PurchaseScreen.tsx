@@ -53,9 +53,7 @@ export default function PurchaseScreen() {
   };
 
   const sortRows = (list: PurchaseRow[]): PurchaseRow[] =>
-    [...list].sort((a, b) =>
-      (a.checked ? 1 : 0) - (b.checked ? 1 : 0) || rowPriority(a) - rowPriority(b)
-    );
+    [...list].sort((a, b) => rowPriority(a) - rowPriority(b));
 
   const toRows = (list: ShoppingItem[]): PurchaseRow[] =>
     sortRows(list.map((item) => ({ item, checked: false, qty: String(item.quantity_to_buy), isExtra: item.item_type === "manual" })));
@@ -301,16 +299,21 @@ export default function PurchaseScreen() {
 
   const sections = React.useMemo(() => {
     const grouped: Record<string, PurchaseRow[]> = {};
+    const inCart: PurchaseRow[] = [];
     for (const row of rows) {
-      const cat = Object.keys(itemCategories).length ? getCategory(row.item.item_name) : "אחר";
+      if (row.checked) {
+        inCart.push(row);
+        continue;
+      }
+      const cat = Object.keys(itemCategories).length ? getCategory(row.item.item_name) : "שונות";
       if (!grouped[cat]) grouped[cat] = [];
       grouped[cat].push(row);
     }
     const CATEGORY_ORDER = [
-      "ירקות ופירות", "מוצרי חלב וגבינות", "בשר ועוף ודגים", "לחם ומאפים",
-      "קפואים", "שימורים וקטניות", "חטיפים וממתקים", "משקאות", "ניקיון וטיפוח", "אחר",
+      "ירקות ופירות", "חלב וגבינות", "בשר ודגים", "מאפים",
+      "מוצרי מזווה", "משקאות", "חטיפים ומתוקים", "ניקיון ופארם", "שונות",
     ];
-    return CATEGORY_ORDER
+    const result = CATEGORY_ORDER
       .filter((cat) => grouped[cat]?.length)
       .map((cat) => ({ title: cat, data: grouped[cat] }))
       .concat(
@@ -318,6 +321,10 @@ export default function PurchaseScreen() {
           .filter((cat) => !CATEGORY_ORDER.includes(cat))
           .map((cat) => ({ title: cat, data: grouped[cat] }))
       );
+    if (inCart.length) {
+      result.push({ title: "בעגלה", data: inCart });
+    }
+    return result;
   }, [rows, itemCategories]);
 
   const checkedCount = rows.filter((r) => r.checked).length;
@@ -484,11 +491,12 @@ export default function PurchaseScreen() {
           </View>
         }
         renderSectionHeader={({ section }) => (
-          Object.keys(itemCategories).length ? (
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionHeaderText}>{section.title}</Text>
-            </View>
-          ) : null
+          <View style={[styles.sectionHeader, section.title === "בעגלה" && styles.sectionHeaderCart]}>
+            {section.title === "בעגלה"
+              ? <Ionicons name="cart" size={18} color="#2e7d32" />
+              : <Text style={styles.sectionHeaderText}>{section.title}</Text>
+            }
+          </View>
         )}
         renderItem={({ item: row }) => (
           <View style={[styles.card, row.isExtra && styles.cardExtra, row.item.is_temporary && styles.cardTemp, row.checked && styles.cardDone]}>
@@ -713,6 +721,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   sectionHeaderText: { fontSize: 13, fontWeight: "700", color: "#0262A0" },
+  sectionHeaderCart: { backgroundColor: "#c8e6c9" },
+  sectionHeaderCartText: { color: "#2e7d32" },
   card: {
     flexDirection: "row-reverse",
     alignItems: "center",
