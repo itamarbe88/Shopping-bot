@@ -13,7 +13,6 @@ from pydantic import BaseModel, validator
 from api.logic import (
     _load,
     _save,
-    categorize_new_items,
     confirm_shopping,
     create_household,
     delete_item,
@@ -30,7 +29,6 @@ from api.logic import (
     read_last_list,
     list_items_with_images,
     save_item_image,
-    seed_categories_from_onboarding,
     set_item_on_hold,
     upsert_item,
     write_last_list,
@@ -41,18 +39,6 @@ GOOGLE_CLIENT_ID = os.environ["GOOGLE_CLIENT_ID"]
 
 app = FastAPI(title="Grocery Inventory API")
 
-
-@app.on_event("startup")
-async def startup_event():
-    import threading
-    def _seed():
-        try:
-            print("[STARTUP] Seeding item categories...")
-            seed_categories_from_onboarding()
-            print("[STARTUP] Category seeding complete.")
-        except Exception as e:
-            print(f"[STARTUP] Category seeding failed: {type(e).__name__}: {e}")
-    threading.Thread(target=_seed, daemon=True).start()
 
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(request: Request, exc: RequestValidationError):
@@ -365,10 +351,3 @@ def add_manual_item(body: TempItemRequest, hh: str = Depends(get_hh_id)):
 
 
 
-@app.post("/admin/categorize-new-items")
-def run_categorize_new_items(secret: str):
-    """Scan all households for uncategorized items and categorize them with Claude."""
-    if secret != os.environ.get("ADMIN_SECRET", ""):
-        raise HTTPException(status_code=403, detail="Forbidden")
-    result = categorize_new_items()
-    return result
