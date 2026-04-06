@@ -12,6 +12,23 @@ import string
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+
+HEBREW_CATEGORIES = [
+    "ירקות ופירות",
+    "מוצרי חלב וגבינות",
+    "בשר ועוף ודגים",
+    "לחם ומאפים",
+    "קפואים",
+    "שימורים וקטניות",
+    "חטיפים וממתקים",
+    "משקאות",
+    "ניקיון וטיפוח",
+    "אחר",
+]
+
+GLOBAL_CATEGORIES_PATH = "global/item_categories.json"
+
 # ── Storage backend ─────────────────────────────────────────────────────────────
 
 GCS_BUCKET = os.environ.get("GCS_BUCKET")
@@ -442,3 +459,135 @@ def set_item_on_hold(household_id: str, item_name: str, on_hold: bool) -> dict:
             _save(items, household_id)
             return {"success": True}
     return {"success": False, "message": f"Item '{item_name}' not found."}
+
+
+# ── Global item categories ───────────────────────────────────────────────────────
+
+def _load_categories() -> dict:
+    data = _read(GLOBAL_CATEGORIES_PATH)
+    if data is None:
+        return {}
+    return json.loads(data.decode("utf-8"))
+
+
+def _save_categories(categories: dict) -> None:
+    _write(GLOBAL_CATEGORIES_PATH, json.dumps(categories, ensure_ascii=False, indent=2).encode("utf-8"))
+
+
+def get_category_for_item(item_name: str, categories: dict) -> str:
+    """Exact match first, then substring match (e.g. 'גבינה' matches 'גבינה 5%')."""
+    if item_name in categories:
+        return categories[item_name]
+    for known_name, category in categories.items():
+        if known_name in item_name or item_name in known_name:
+            return category
+    return "אחר"
+
+
+def get_categories_for_items(item_names: list[str]) -> dict:
+    """Return { item_name: category } for a list of items, using the global map."""
+    categories = _load_categories()
+    return {name: get_category_for_item(name, categories) for name in item_names}
+
+
+def _categorize_with_claude(item_names: list[str]) -> dict:
+    """Call Claude API to categorize a batch of Hebrew item names. Returns { item_name: category }."""
+    if not ANTHROPIC_API_KEY:
+        return {}
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        categories_list = "\n".join(f"- {c}" for c in HEBREW_CATEGORIES)
+        items_list = "\n".join(item_names)
+        message = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1024,
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"אתה עוזר לסווג פריטי מכולת לקטגוריות של סופרמרקט.\n"
+                    f"הקטגוריות האפשריות הן:\n{categories_list}\n\n"
+                    f"סווג כל פריט מהרשימה הבאה לאחת מהקטגוריות.\n"
+                    f"החזר JSON בלבד בפורמט: {{\"שם פריט\": \"קטגוריה\", ...}}\n\n"
+                    f"פריטים לסיווג:\n{items_list}"
+                ),
+            }],
+        )
+        text = message.content[0].text.strip()
+        # Strip markdown code fences if present
+        if text.startswith("```"):
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+        return json.loads(text.strip())
+    except Exception:
+        return {}
+
+
+def categorize_new_items() -> dict:
+    """
+    Scan all household inventories + onboarding template for item names not yet
+    in the global categories map. Categorize them with Claude and save.
+    Returns { added: int, total: int }.
+    """
+    categories = _load_categories()
+
+    # Collect all known item names across all households + onboarding template
+    all_items: set[str] = set()
+
+    # From onboarding template
+    template = get_onboarding_template()
+    for row in template:
+        all_items.add(row["item_name"])
+
+    # From all household inventories — list blobs under households/
+    if GCS_BUCKET:
+        try:
+            blobs = list(_bucket.list_blobs(prefix="households/"))
+            household_ids = set()
+            for blob in blobs:
+                parts = blob.name.split("/")
+                if len(parts) >= 2:
+                    household_ids.add(parts[1])
+            for hh_id in household_ids:
+                for item in _load(hh_id):
+                    all_items.add(item["item_name"])
+        except Exception:
+            pass
+    else:
+        # Local dev: scan data/households/
+        households_dir = Path(__file__).parent.parent / "data" / "households"
+        if households_dir.exists():
+            for hh_dir in households_dir.iterdir():
+                if hh_dir.is_dir():
+                    for item in _load(hh_dir.name):
+                        all_items.add(item["item_name"])
+
+    # Find items not yet categorized (no exact or substring match)
+    new_items = [
+        name for name in all_items
+        if get_category_for_item(name, categories) == "אחר"
+        and name not in categories
+    ]
+
+    if not new_items:
+        return {"added": 0, "total": len(categories)}
+
+    result = _categorize_with_claude(new_items)
+    categories.update(result)
+    _save_categories(categories)
+
+    return {"added": len(result), "total": len(categories)}
+
+
+def seed_categories_from_onboarding() -> None:
+    """Seed the global categories map from the onboarding template if it doesn't exist yet."""
+    if _exists(GLOBAL_CATEGORIES_PATH):
+        return
+    template = get_onboarding_template()
+    item_names = [row["item_name"] for row in template if row.get("item_name")]
+    if not item_names:
+        return
+    result = _categorize_with_claude(item_names)
+    if result:
+        _save_categories(result)

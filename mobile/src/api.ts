@@ -290,3 +290,17 @@ export async function fetchOnboardingTemplate(): Promise<OnboardingItem[]> {
   if (!res.ok) return [];
   return res.json();
 }
+
+export async function fetchItemCategories(itemNames: string[]): Promise<Record<string, string>> {
+  if (!itemNames.length) return {};
+  try {
+    const query = encodeURIComponent(itemNames.join(","));
+    const res = await apiFetch(`${BASE_URL}/shopping-list/categories?items=${query}`, {
+      headers: await authHeaders(),
+    });
+    if (!res.ok) return {};
+    return res.json();
+  } catch {
+    return {};
+  }
+}

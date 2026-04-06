@@ -4,11 +4,11 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   Image,
   Keyboard,
   Modal,
   ScrollView,
+  SectionList,
   StyleSheet,
   Text,
   TextInput,
@@ -17,7 +17,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { PurchaseItem, ShoppingItem, VoiceMatchedItem, addManualItem, addTemporaryItem, confirmPurchases, deleteInventoryItem, fetchInventory, fetchItemImage, fetchItemsWithImages, fetchLastShoppingList, fetchShoppingList, overrideShoppingListQty, processVoiceItems, removeFromShoppingList } from "../api";
+import { PurchaseItem, ShoppingItem, VoiceMatchedItem, addManualItem, addTemporaryItem, confirmPurchases, deleteInventoryItem, fetchInventory, fetchItemCategories, fetchItemImage, fetchItemsWithImages, fetchLastShoppingList, fetchShoppingList, overrideShoppingListQty, processVoiceItems, removeFromShoppingList } from "../api";
 import { getItemIcon } from "../icons";
 import { useVoice } from "../hooks/useVoice";
 
@@ -132,6 +132,17 @@ export default function PurchaseScreen() {
   const [voiceResult, setVoiceResult] = useState<{ found: VoiceMatchedItem[]; not_found: string[] } | null>(null);
   const [checkedNotFound, setCheckedNotFound] = useState<Set<string>>(new Set());
   const [checkedFound, setCheckedFound] = useState<Set<string>>(new Set());
+
+  // ── Item categories ────────────────────────────────────────────────────────
+  const [itemCategories, setItemCategories] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!rows.length) return;
+    const names = rows.map((r) => r.item.item_name);
+    fetchItemCategories(names).then((cats) => {
+      if (Object.keys(cats).length) setItemCategories(cats);
+    }).catch(() => {});
+  }, [hasGenerated]);
 
   // ── Item images ────────────────────────────────────────────────────────────
   const [itemsWithImages, setItemsWithImages] = useState<Set<string>>(new Set());
@@ -279,11 +290,35 @@ export default function PurchaseScreen() {
     });
   }, [navigation, handleRefresh, hasGenerated]);
 
-  const toggle = (i: number) =>
-    setRows((prev) => sortRows(prev.map((r, idx) => idx === i ? { ...r, checked: !r.checked } : r)));
+  const toggle = (itemName: string) =>
+    setRows((prev) => sortRows(prev.map((r) => r.item.item_name === itemName ? { ...r, checked: !r.checked } : r)));
 
-  const setQty = (i: number, val: string) =>
-    setRows((prev) => prev.map((r, idx) => idx === i ? { ...r, qty: val } : r));
+  const setQty = (itemName: string, val: string) =>
+    setRows((prev) => prev.map((r) => r.item.item_name === itemName ? { ...r, qty: val } : r));
+
+  const getCategory = (itemName: string): string =>
+    itemCategories[itemName] ?? Object.entries(itemCategories).find(([k]) => k.includes(itemName) || itemName.includes(k))?.[1] ?? "אחר";
+
+  const sections = React.useMemo(() => {
+    const grouped: Record<string, PurchaseRow[]> = {};
+    for (const row of rows) {
+      const cat = Object.keys(itemCategories).length ? getCategory(row.item.item_name) : "אחר";
+      if (!grouped[cat]) grouped[cat] = [];
+      grouped[cat].push(row);
+    }
+    const CATEGORY_ORDER = [
+      "ירקות ופירות", "מוצרי חלב וגבינות", "בשר ועוף ודגים", "לחם ומאפים",
+      "קפואים", "שימורים וקטניות", "חטיפים וממתקים", "משקאות", "ניקיון וטיפוח", "אחר",
+    ];
+    return CATEGORY_ORDER
+      .filter((cat) => grouped[cat]?.length)
+      .map((cat) => ({ title: cat, data: grouped[cat] }))
+      .concat(
+        Object.keys(grouped)
+          .filter((cat) => !CATEGORY_ORDER.includes(cat))
+          .map((cat) => ({ title: cat, data: grouped[cat] }))
+      );
+  }, [rows, itemCategories]);
 
   const checkedCount = rows.filter((r) => r.checked).length;
 
@@ -437,8 +472,8 @@ export default function PurchaseScreen() {
         <Text style={styles.selectAllBtnText}>{checkedCount === rows.length ? "נקה הכל" : "סמן הכל"}</Text>
       </TouchableOpacity>
 
-      <FlatList
-        data={rows}
+      <SectionList
+        sections={sections}
         keyExtractor={(r) => r.item.item_name}
         contentContainerStyle={styles.list}
         ListEmptyComponent={
@@ -448,7 +483,14 @@ export default function PurchaseScreen() {
             </Text>
           </View>
         }
-        renderItem={({ item: row, index }) => (
+        renderSectionHeader={({ section }) => (
+          Object.keys(itemCategories).length ? (
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionHeaderText}>{section.title}</Text>
+            </View>
+          ) : null
+        )}
+        renderItem={({ item: row }) => (
           <View style={[styles.card, row.isExtra && styles.cardExtra, row.item.is_temporary && styles.cardTemp, row.checked && styles.cardDone]}>
             {/* Item name */}
             <Text style={[styles.name, row.checked && styles.nameDone]}>
@@ -458,14 +500,14 @@ export default function PurchaseScreen() {
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <TouchableOpacity
                 style={[styles.checkbox, row.checked && styles.checkboxChecked]}
-                onPress={() => toggle(index)}
+                onPress={() => toggle(row.item.item_name)}
               >
                 {row.checked && <Text style={styles.checkmark}>✓</Text>}
               </TouchableOpacity>
               <TextInput
                 style={[styles.qtyInput, row.checked && styles.qtyDone]}
                 value={row.qty}
-                onChangeText={(v) => setQty(index, v)}
+                onChangeText={(v) => setQty(row.item.item_name, v)}
                 onBlur={() => {
                   const val = parseInt(row.qty);
                   if (!isNaN(val) && val >= 1 && val !== row.item.quantity_to_buy) {
@@ -662,6 +704,15 @@ const styles = StyleSheet.create({
   summaryBar: { backgroundColor: BLUE, paddingVertical: 10, paddingHorizontal: 16, alignItems: "center" },
   summaryText: { color: "#fff", fontSize: 14, fontWeight: "600" },
   list: { padding: 12 },
+  sectionHeader: {
+    backgroundColor: "#e3f0fb",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  sectionHeaderText: { fontSize: 13, fontWeight: "700", color: "#0262A0" },
   card: {
     flexDirection: "row-reverse",
     alignItems: "center",

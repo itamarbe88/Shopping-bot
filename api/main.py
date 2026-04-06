@@ -13,12 +13,14 @@ from pydantic import BaseModel, validator
 from api.logic import (
     _load,
     _save,
+    categorize_new_items,
     confirm_shopping,
     create_household,
     delete_item,
     delete_item_image,
     delete_last_list,
     generate_shopping_list,
+    get_categories_for_items,
     get_household_id,
     get_inventory,
     get_item_image,
@@ -28,6 +30,7 @@ from api.logic import (
     read_last_list,
     list_items_with_images,
     save_item_image,
+    seed_categories_from_onboarding,
     set_item_on_hold,
     upsert_item,
     write_last_list,
@@ -37,6 +40,14 @@ from api.logic import (
 GOOGLE_CLIENT_ID = os.environ["GOOGLE_CLIENT_ID"]
 
 app = FastAPI(title="Grocery Inventory API")
+
+
+@app.on_event("startup")
+async def startup_event():
+    try:
+        seed_categories_from_onboarding()
+    except Exception as e:
+        print(f"[STARTUP] Category seeding failed (non-fatal): {e}")
 
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(request: Request, exc: RequestValidationError):
@@ -339,3 +350,20 @@ def add_manual_item(body: TempItemRequest, hh: str = Depends(get_hh_id)):
     })
     _save(items, hh)
     return {"success": True, "item": body.item_name, "quantity": body.quantity}
+
+
+# ── Item categories ──────────────────────────────────────────────────────────────
+
+@app.get("/shopping-list/categories")
+def get_item_categories(items: str, hh: str = Depends(get_hh_id)):
+    """Return { item_name: category } for a comma-separated list of item names."""
+    item_names = [n.strip() for n in items.split(",") if n.strip()]
+    return get_categories_for_items(item_names)
+
+
+@app.post("/admin/categorize-new-items")
+def run_categorize_new_items(authorization: str = Header(...)):
+    """Scan all households for uncategorized items and categorize them with Claude."""
+    _verify_token(authorization)  # must be authenticated, any valid user
+    result = categorize_new_items()
+    return result
