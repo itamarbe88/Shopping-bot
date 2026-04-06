@@ -705,7 +705,7 @@ const styles = StyleSheet.create({
   summaryText: { color: "#fff", fontSize: 14, fontWeight: "600" },
   list: { padding: 12 },
   sectionHeader: {
-    backgroundColor: "#e3f0fb",
+    backgroundColor: "#b8d4ee",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
