@@ -44,10 +44,15 @@ app = FastAPI(title="Grocery Inventory API")
 
 @app.on_event("startup")
 async def startup_event():
-    try:
-        seed_categories_from_onboarding()
-    except Exception as e:
-        print(f"[STARTUP] Category seeding failed (non-fatal): {e}")
+    import threading
+    def _seed():
+        try:
+            print("[STARTUP] Seeding item categories...")
+            seed_categories_from_onboarding()
+            print("[STARTUP] Category seeding complete.")
+        except Exception as e:
+            print(f"[STARTUP] Category seeding failed: {type(e).__name__}: {e}")
+    threading.Thread(target=_seed, daemon=True).start()
 
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(request: Request, exc: RequestValidationError):
