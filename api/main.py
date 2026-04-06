@@ -366,8 +366,9 @@ def add_manual_item(body: TempItemRequest, hh: str = Depends(get_hh_id)):
 
 
 @app.post("/admin/categorize-new-items")
-def run_categorize_new_items(authorization: str = Header(...)):
+def run_categorize_new_items(secret: str):
     """Scan all households for uncategorized items and categorize them with Claude."""
-    _verify_token(authorization)  # must be authenticated, any valid user
+    if secret != os.environ.get("ADMIN_SECRET", ""):
+        raise HTTPException(status_code=403, detail="Forbidden")
     result = categorize_new_items()
     return result
