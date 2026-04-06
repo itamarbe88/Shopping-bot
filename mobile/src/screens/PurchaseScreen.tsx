@@ -243,14 +243,18 @@ export default function PurchaseScreen() {
     await startRecording();
   };
 
-  // Auto-search when recording stops and there is a transcript
+  // Auto-search when recording stops and transcript arrives
   const wasRecordingRef = useRef(false);
   useEffect(() => {
-    if (wasRecordingRef.current && !isRecording && transcript.trim() && !voiceResult) {
-      handleVoiceSubmit();
+    if (wasRecordingRef.current && !isRecording) {
+      // Wait briefly for transcript state to settle after onSpeechEnd fires
+      const timer = setTimeout(() => {
+        if (transcript.trim() && !voiceResult) handleVoiceSubmit();
+      }, 300);
+      return () => clearTimeout(timer);
     }
     wasRecordingRef.current = isRecording;
-  }, [isRecording]);
+  }, [isRecording, transcript]);
 
   useEffect(() => {
     fetchInventory().then((inv) => setAllInventoryNames(inv.map((i) => i.item_name)));
