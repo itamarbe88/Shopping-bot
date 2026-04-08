@@ -15,6 +15,7 @@ from api.logic import (
     _save,
     confirm_shopping,
     create_household,
+    delete_account,
     delete_item,
     delete_item_image,
     delete_last_list,
@@ -331,6 +332,12 @@ def toggle_hold(item_name: str, body: HoldRequest, hh: str = Depends(get_hh_id))
     if not result["success"]:
         raise HTTPException(status_code=404, detail=result.get("message"))
     return result
+
+
+@app.delete("/account")
+def delete_my_account(user_id: str = Depends(get_user_id)):
+    delete_account(user_id)
+    return {"success": True}
 
 
 @app.post("/inventory/manual")

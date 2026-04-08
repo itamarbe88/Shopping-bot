@@ -4,28 +4,96 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Delete Account – Salvador</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 20px; color: #333; line-height: 1.7; }
-    h1 { color: #1a73e8; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; max-width: 520px; margin: 60px auto; padding: 0 20px; color: #333; line-height: 1.7; }
+    h1 { color: #1a73e8; font-size: 24px; }
     p { font-size: 15px; }
-    .box { background: #f8f8f8; border: 1px solid #ddd; border-radius: 8px; padding: 20px 24px; margin-top: 24px; }
-    a.button { display: inline-block; margin-top: 16px; padding: 12px 24px; background: #d93025; color: #fff; border-radius: 6px; text-decoration: none; font-weight: bold; }
-    a.button:hover { background: #b52a20; }
-    footer { margin-top: 48px; font-size: 13px; color: #888; }
+    #step-signin { text-align: center; padding: 32px 0; }
+    #step-confirm { display: none; }
+    .user-info { background: #f1f3f4; border-radius: 8px; padding: 14px 18px; margin: 20px 0; font-size: 14px; }
+    .warning { background: #fce8e6; border: 1px solid #f28b82; border-radius: 8px; padding: 14px 18px; margin: 20px 0; font-size: 14px; color: #c5221f; }
+    button.delete-btn { background: #d93025; color: #fff; border: none; border-radius: 6px; padding: 12px 28px; font-size: 15px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 8px; }
+    button.delete-btn:hover { background: #b52a20; }
+    button.delete-btn:disabled { background: #ccc; cursor: not-allowed; }
+    #step-done { display: none; text-align: center; padding: 32px 0; color: #188038; }
+    #step-done h2 { color: #188038; }
+    #error-msg { color: #c5221f; font-size: 14px; margin-top: 10px; display: none; }
+    footer { margin-top: 48px; font-size: 13px; color: #888; border-top: 1px solid #eee; padding-top: 16px; }
   </style>
 </head>
 <body>
   <h1>Delete Your Salvador Account</h1>
+  <p>Sign in with your Google account to permanently delete your Salvador account and all associated data.</p>
 
-  <p>You can request deletion of your account and all associated data at any time. This includes your profile, household data, grocery lists, and inventory.</p>
+  <div id="step-signin">
+    <p style="color:#666; font-size:14px;">Sign in to verify your identity before deleting your account.</p>
+    <div id="google-btn"></div>
+  </div>
 
-  <div class="box">
-    <p><strong>To request account deletion:</strong></p>
-    <p>Send an email to <a href="mailto:itamar.benezra@gmail.com?subject=Delete%20My%20Salvador%20Account">itamar.benezra@gmail.com</a> with the subject line <em>"Delete My Salvador Account"</em> from the email address associated with your account.</p>
-    <p>Your account and all data will be permanently deleted within 7 days.</p>
-    <a class="button" href="mailto:itamar.benezra@gmail.com?subject=Delete%20My%20Salvador%20Account">Request Account Deletion</a>
+  <div id="step-confirm">
+    <div class="user-info">
+      Signed in as: <strong id="user-email"></strong>
+    </div>
+    <div class="warning">
+      <strong>Warning:</strong> This will permanently delete your account, household data, grocery lists, and inventory. This action cannot be undone.
+    </div>
+    <button class="delete-btn" id="delete-btn" onclick="deleteAccount()">Delete My Account</button>
+    <div id="error-msg"></div>
+  </div>
+
+  <div id="step-done">
+    <h2>Account Deleted</h2>
+    <p>Your account and all associated data have been permanently deleted.</p>
   </div>
 
   <footer>Salvador &copy; 2026 &middot; <a href="privacy-policy.html">Privacy Policy</a></footer>
+
+  <script>
+    const API_BASE = "https://salvador-api-49266329932.europe-west1.run.app";
+    let idToken = null;
+
+    window.onload = function () {
+      google.accounts.id.initialize({
+        client_id: "649187546398-rc0vt8rjpbh0m0r2bni75nnr4eaa4v2o.apps.googleusercontent.com",
+        callback: handleCredential,
+      });
+      google.accounts.id.renderButton(document.getElementById("google-btn"), {
+        theme: "outline", size: "large", text: "signin_with",
+      });
+    };
+
+    function handleCredential(response) {
+      idToken = response.credential;
+      const payload = JSON.parse(atob(idToken.split(".")[1]));
+      document.getElementById("user-email").textContent = payload.email;
+      document.getElementById("step-signin").style.display = "none";
+      document.getElementById("step-confirm").style.display = "block";
+    }
+
+    async function deleteAccount() {
+      const btn = document.getElementById("delete-btn");
+      const errMsg = document.getElementById("error-msg");
+      btn.disabled = true;
+      btn.textContent = "Deleting...";
+      errMsg.style.display = "none";
+
+      try {
+        const res = await fetch(API_BASE + "/account", {
+          method: "DELETE",
+          headers: { "Authorization": "Bearer " + idToken },
+        });
+        if (!res.ok) throw new Error("Server error: " + res.status);
+        document.getElementById("step-confirm").style.display = "none";
+        document.getElementById("step-done").style.display = "block";
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = "Delete My Account";
+        errMsg.textContent = "Something went wrong. Please try again or contact itamar.benezra@gmail.com";
+        errMsg.style.display = "block";
+      }
+    }
+  </script>
 </body>
 </html>

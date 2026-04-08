@@ -40,6 +40,10 @@ if GCS_BUCKET:
         if blob.exists():
             blob.delete()
 
+    def _delete_prefix(prefix: str) -> None:
+        for blob in _bucket.list_blobs(prefix=prefix):
+            blob.delete()
+
 else:
     BASE_DIR = Path(__file__).parent.parent
     DATA_DIR = BASE_DIR / "data"
@@ -62,6 +66,12 @@ else:
         p = DATA_DIR / path
         if p.exists():
             p.unlink()
+
+    def _delete_prefix(prefix: str) -> None:
+        import shutil
+        p = DATA_DIR / prefix
+        if p.exists():
+            shutil.rmtree(p)
 
 
 # ── Path helpers ────────────────────────────────────────────────────────────────
@@ -434,6 +444,16 @@ def process_voice_items(household_id: str, speech_text: str) -> dict:
         "raw_text": speech_text,
         "parsed_items": parsed_items,
     }
+
+
+# ── Account deletion ─────────────────────────────────────────────────────────────
+
+def delete_account(user_id: str) -> None:
+    """Delete all data associated with a user: their member file and household data."""
+    hh = get_household_id(user_id)
+    _delete(_member_path(user_id))
+    if hh:
+        _delete_prefix(f"households/{hh}/")
 
 
 def set_item_on_hold(household_id: str, item_name: str, on_hold: bool) -> dict:
