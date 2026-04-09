@@ -9,6 +9,7 @@ import json
 import os
 import secrets
 import string
+from contextvars import ContextVar
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -454,6 +455,47 @@ def delete_account(user_id: str) -> None:
     _delete(_member_path(user_id))
     if hh:
         _delete_prefix(f"households/{hh}/")
+
+
+# ── Audit log ────────────────────────────────────────────────────────────────────
+
+AUDIT_LOG_ENABLED = os.environ.get("AUDIT_LOG_ENABLED", "false").lower() == "true"
+
+# Per-request buffer — accumulates events, flushed once at end of request
+_audit_buffer: ContextVar[list] = ContextVar("_audit_buffer", default=None)
+
+
+def audit_init():
+    """Call at the start of each request to initialize the buffer."""
+    _audit_buffer.set([])
+
+
+def audit_log(user_id: str, action: str, detail: dict | None = None):
+    """Append an event to the current request's audit buffer."""
+    if not AUDIT_LOG_ENABLED:
+        return
+    buf = _audit_buffer.get()
+    if buf is None:
+        return
+    buf.append({
+        "ts": datetime.utcnow().isoformat() + "Z",
+        "user_id": user_id,
+        "action": action,
+        "detail": detail or {},
+    })
+
+
+def audit_flush():
+    """Write buffered events to GCS as a single object. Call at end of request."""
+    if not AUDIT_LOG_ENABLED:
+        return
+    buf = _audit_buffer.get()
+    if not buf:
+        return
+    now = datetime.utcnow()
+    user_id = buf[0]["user_id"]
+    path = f"audit/{now.strftime('%Y/%m')}/{user_id}/{now.strftime('%Y%m%dT%H%M%S%f')}.json"
+    _write(path, json.dumps(buf, ensure_ascii=False).encode())
 
 
 def set_item_on_hold(household_id: str, item_name: str, on_hold: bool) -> dict:

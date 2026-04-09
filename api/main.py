@@ -13,6 +13,9 @@ from pydantic import BaseModel, validator
 from api.logic import (
     _load,
     _save,
+    audit_flush,
+    audit_init,
+    audit_log,
     confirm_shopping,
     create_household,
     delete_account,
@@ -52,6 +55,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def audit_middleware(request: Request, call_next):
+    audit_init()
+    response = await call_next(request)
+    audit_flush()
+    return response
 
 
 # ── Auth dependencies ───────────────────────────────────────────────────────────
@@ -94,6 +105,7 @@ def household_me(user_id: str = Depends(get_user_id)):
 @app.post("/household/create")
 def household_create(user_id: str = Depends(get_user_id)):
     hh = create_household(user_id)
+    audit_log(user_id, "household_created", {"household_id": hh})
     return {"household_id": hh}
 
 
@@ -106,7 +118,9 @@ def household_join(body: JoinRequest, user_id: str = Depends(get_user_id)):
     ok = join_household(user_id, body.code)
     if not ok:
         raise HTTPException(status_code=404, detail="Household not found")
-    return {"household_id": body.code.upper().strip()}
+    hh = body.code.upper().strip()
+    audit_log(user_id, "household_joined", {"household_id": hh})
+    return {"household_id": hh}
 
 
 @app.get("/onboarding/template")
@@ -149,7 +163,8 @@ class UpsertItemRequest(BaseModel):
 
 
 @app.post("/inventory/item")
-def create_or_update_item(body: UpsertItemRequest, hh: str = Depends(get_hh_id)):
+def create_or_update_item(body: UpsertItemRequest, hh: str = Depends(get_hh_id), user_id: str = Depends(get_user_id)):
+    audit_log(user_id, "item_upserted", {"item": body.item_name})
     return upsert_item(
         household_id=hh,
         item_name=body.item_name,
@@ -162,10 +177,11 @@ def create_or_update_item(body: UpsertItemRequest, hh: str = Depends(get_hh_id))
 
 
 @app.delete("/inventory/item/{item_name}")
-def remove_item(item_name: str, item_type: str | None = None, hh: str = Depends(get_hh_id)):
+def remove_item(item_name: str, item_type: str | None = None, hh: str = Depends(get_hh_id), user_id: str = Depends(get_user_id)):
     result = delete_item(hh, item_name, item_type=item_type)
     if not result["success"]:
         raise HTTPException(status_code=404, detail=result["message"])
+    audit_log(user_id, "item_deleted", {"item": item_name})
     return result
 
 
@@ -248,7 +264,8 @@ def override_shopping_list_qty(item_name: str, body: QtyOverrideRequest, hh: str
 
 
 @app.post("/shopping-list/confirm")
-def confirm(body: ConfirmRequest, hh: str = Depends(get_hh_id)):
+def confirm(body: ConfirmRequest, hh: str = Depends(get_hh_id), user_id: str = Depends(get_user_id)):
+    audit_log(user_id, "shopping_confirmed", {"items": [p.item_name for p in body.purchases]})
     result = confirm_shopping(hh, [p.model_dump() for p in body.purchases])
     return result
 
@@ -336,6 +353,8 @@ def toggle_hold(item_name: str, body: HoldRequest, hh: str = Depends(get_hh_id))
 
 @app.delete("/account")
 def delete_my_account(user_id: str = Depends(get_user_id)):
+    audit_log(user_id, "account_deleted", {})
+    audit_flush()  # flush before deletion so the log is written
     delete_account(user_id)
     return {"success": True}
 
