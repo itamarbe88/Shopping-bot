@@ -278,7 +278,7 @@ export default function OnboardingWizardScreen({ onComplete }: Props) {
   const icon = getItemIcon(currentItem.item_name);
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       {/* Blue top header bar */}
       <View style={[styles.headerBar, { paddingTop: insets.top + 12 }]}>
         <Text style={styles.headerTitle}>הגדרת מלאי ראשוני</Text>

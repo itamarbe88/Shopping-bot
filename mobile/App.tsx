@@ -192,7 +192,8 @@ function RootNavigator() {
       }
     }} />
   );
-  if (needsOnboarding) return (
+  // TEMP: force wizard for testing — revert before production build
+  if (household) return (
     <OnboardingWizardScreen onComplete={completeOnboarding} />
   );
   return <AppTabs />;

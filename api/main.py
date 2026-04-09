@@ -73,7 +73,6 @@ def _verify_token(authorization: str) -> str:
     token = authorization[7:]
     try:
         info = id_token.verify_oauth2_token(token, grequests.Request(), GOOGLE_CLIENT_ID)
-        print(f"[AUTH] user_id={info['sub']} email={info.get('email')}")
         return info["sub"]
     except Exception as e:
         print(f"[AUTH] Token verification failed: {e}")
@@ -303,7 +302,10 @@ MAX_IMAGE_BYTES = 200 * 1024  # 200 KB
 
 @app.post("/inventory/image")
 def upload_item_image(body: ImageUploadRequest, hh: str = Depends(get_hh_id)):
-    image_bytes = base64.b64decode(body.image_base64)
+    try:
+        image_bytes = base64.b64decode(body.image_base64)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid base64 image data")
     if len(image_bytes) > MAX_IMAGE_BYTES:
         raise HTTPException(status_code=400, detail="Image exceeds 200KB limit")
     save_item_image(hh, body.item_name, image_bytes)
