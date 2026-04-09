@@ -39,11 +39,11 @@ function ShoppingStack() {
   );
 }
 
-function AppTabs() {
+function AppTabs({ initialTab = "SimulationTab" }: { initialTab?: string }) {
   const insets = useSafeAreaInsets();
   return (
     <Tab.Navigator
-      initialRouteName="SimulationTab"
+      initialRouteName={initialTab}
       screenOptions={{
         tabBarActiveTintColor: "#fff",
         tabBarInactiveTintColor: "rgba(255,255,255,0.55)",
@@ -130,6 +130,7 @@ function RootNavigator() {
   const { user, loading, signOut } = useAuth();
   const [household, setHousehold] = React.useState<string | null | undefined>(undefined);
   const [needsOnboarding, setNeedsOnboarding] = React.useState<boolean | undefined>(undefined);
+  const [initialTab, setInitialTab] = React.useState("SimulationTab");
 
   React.useEffect(() => {
     setOnUnauthorized(() => { signOut(); });
@@ -141,7 +142,7 @@ function RootNavigator() {
       .then(async (id) => {
         setHousehold(id);
         if (id) {
-          // Existing household found on startup — mark onboarding done (wizard only triggers via HouseholdScreen for new households)
+          // Existing household — mark onboarding done (wizard only triggers for new households)
           await AsyncStorage.setItem(onboardingKey(id), "true");
           setNeedsOnboarding(false);
         } else {
@@ -168,6 +169,7 @@ function RootNavigator() {
 
   const completeOnboarding = async () => {
     if (household) await AsyncStorage.setItem(onboardingKey(household), "true");
+    setInitialTab("AboutTab");
     setNeedsOnboarding(false);
   };
 
@@ -192,11 +194,10 @@ function RootNavigator() {
       }
     }} />
   );
-  // TEMP: force wizard for testing — revert before production build
-  if (household) return (
+  if (needsOnboarding) return (
     <OnboardingWizardScreen onComplete={completeOnboarding} />
   );
-  return <AppTabs />;
+  return <AppTabs initialTab={initialTab} />;
 }
 
 export default function App() {

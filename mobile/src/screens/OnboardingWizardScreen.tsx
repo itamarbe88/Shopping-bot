@@ -1,11 +1,10 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Image,
-  KeyboardAvoidingView,
-  Platform,
+  Keyboard,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { OnboardingItem, fetchOnboardingTemplate, upsertInventoryItem } from "../api";
 import { getItemIcon } from "../icons";
@@ -38,6 +38,7 @@ export default function OnboardingWizardScreen({ onComplete }: Props) {
   const [selected, setSelected] = useState<SelectedItem[]>([]);
   const [skipped, setSkipped] = useState<OnboardingItem[]>([]);
   const [hasReachedSummary, setHasReachedSummary] = useState(false);
+  const [cameFromSummary, setCameFromSummary] = useState(false);
 
   // Per-item form state
   const [desired, setDesired] = useState("1");
@@ -45,7 +46,37 @@ export default function OnboardingWizardScreen({ onComplete }: Props) {
   const [restock, setRestock] = useState("7");
   const [daysSincePurchase, setDaysSincePurchase] = useState("7");
 
+  // Saved form values per item index, for back navigation
+  const [formHistory, setFormHistory] = useState<Record<number, { desired: string; current: string; restock: string; daysSincePurchase: string }>>({});
+
   const desiredRef = useRef<TextInput>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", (e) => {
+      setKeyboardOffset(e.endCoordinates.height);
+      setKeyboardVisible(true);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+    });
+    const hide = Keyboard.addListener("keyboardDidHide", () => {
+      setKeyboardOffset(0);
+      setKeyboardVisible(false);
+    });
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+
+  const handleExit = useCallback(() => {
+    Alert.alert(
+      "דילוג על הגדרת מלאי",
+      "בחרת לדלג על הגדרת מלאי ראשונית, תוכל להגדיר מוצרים ידנית במסך 'מלאי' מאוחר יותר, לצאת?",
+      [
+        { text: "לא", style: "cancel" },
+        { text: "כן", style: "destructive", onPress: onComplete },
+      ]
+    );
+  }, [onComplete]);
 
   const startWizard = () => {
     setPhase("loading");
@@ -68,34 +99,65 @@ export default function OnboardingWizardScreen({ onComplete }: Props) {
 
   const currentItem = items[index];
 
+  const loadFormForIndex = useCallback((i: number, history: Record<number, { desired: string; current: string; restock: string; daysSincePurchase: string }>) => {
+    const saved = history[i];
+    if (saved) {
+      setDesired(saved.desired);
+      setCurrent(saved.current);
+      setRestock(saved.restock);
+      setDaysSincePurchase(saved.daysSincePurchase);
+    } else {
+      resetForm();
+    }
+  }, []);
+
   const handleInclude = useCallback(() => {
     const d = Math.max(1, parseInt(desired) || 1);
     const c = Math.max(0, parseInt(current) || 0);
     const r = Math.max(1, parseInt(restock) || 7);
     const dsp = Math.max(0, parseInt(daysSincePurchase) || 7);
-    setSelected((prev) => [
-      ...prev,
-      { ...currentItem, desired: String(d), current: String(c), restock: String(r), daysSincePurchase: String(dsp) },
-    ]);
+    const newHistory = { ...formHistory, [index]: { desired, current, restock, daysSincePurchase } };
+    setFormHistory(newHistory);
+    setSelected((prev) => {
+      const filtered = prev.filter((s) => s.item_name !== currentItem.item_name);
+      return [...filtered, { ...currentItem, desired: String(d), current: String(c), restock: String(r), daysSincePurchase: String(dsp) }];
+    });
+    setSkipped((prev) => prev.filter((s) => s.item_name !== currentItem.item_name));
     if (index + 1 >= items.length) {
       setHasReachedSummary(true);
       setPhase("summary");
     } else {
       setIndex((i) => i + 1);
-      resetForm();
+      loadFormForIndex(index + 1, newHistory);
     }
-  }, [currentItem, desired, current, restock, daysSincePurchase, index, items.length]);
+  }, [currentItem, desired, current, restock, daysSincePurchase, index, items.length, formHistory, loadFormForIndex]);
 
   const handleSkip = useCallback(() => {
-    setSkipped((prev) => [...prev, currentItem]);
+    const newHistory = { ...formHistory, [index]: { desired, current, restock, daysSincePurchase } };
+    setFormHistory(newHistory);
+    setSkipped((prev) => {
+      const filtered = prev.filter((s) => s.item_name !== currentItem.item_name);
+      return [...filtered, currentItem];
+    });
+    setSelected((prev) => prev.filter((s) => s.item_name !== currentItem.item_name));
     if (index + 1 >= items.length) {
       setHasReachedSummary(true);
       setPhase("summary");
     } else {
       setIndex((i) => i + 1);
-      resetForm();
+      loadFormForIndex(index + 1, newHistory);
     }
-  }, [currentItem, index, items.length]);
+  }, [currentItem, desired, current, restock, daysSincePurchase, index, items.length, formHistory, loadFormForIndex]);
+
+  const handleBack = useCallback(() => {
+    if (index === 0) return;
+    const prevIndex = index - 1;
+    const prevItem = items[prevIndex];
+    setSelected((prev) => prev.filter((s) => s.item_name !== prevItem.item_name));
+    setSkipped((prev) => prev.filter((s) => s.item_name !== prevItem.item_name));
+    setIndex(prevIndex);
+    loadFormForIndex(prevIndex, formHistory);
+  }, [index, items, formHistory, loadFormForIndex]);
 
   const handleAddToInventory = async () => {
     setPhase("saving");
@@ -172,6 +234,9 @@ export default function OnboardingWizardScreen({ onComplete }: Props) {
       setItems(skipped);
       setSkipped([]);
       setIndex(0);
+      setFormHistory({});
+      setHasReachedSummary(false);
+      setCameFromSummary(true);
       resetForm();
       setPhase("wizard");
     };
@@ -191,8 +256,8 @@ export default function OnboardingWizardScreen({ onComplete }: Props) {
               <Text style={styles.secondaryBtnText}>חזור אל פריטים שלא נבחרו ({skipped.length})</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={styles.exitBtn} onPress={onComplete}>
-            <Text style={styles.exitBtnText}>צא מהאשף</Text>
+          <TouchableOpacity style={styles.exitBtn} onPress={handleExit}>
+            <Text style={styles.exitBtnText}>דלג</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -266,8 +331,8 @@ export default function OnboardingWizardScreen({ onComplete }: Props) {
           <TouchableOpacity style={styles.primaryBtn} onPress={handleAddToInventory}>
             <Text style={styles.primaryBtnText}>הוסף {selected.length} פריטים למלאי</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={() => setPhase("summary")}>
-            <Text style={styles.secondaryBtnText}>חזור</Text>
+          <TouchableOpacity style={styles.backBtn} onPress={() => setPhase("summary")}>
+            <Text style={styles.backBtnText}>חזור</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -278,13 +343,23 @@ export default function OnboardingWizardScreen({ onComplete }: Props) {
   const icon = getItemIcon(currentItem.item_name);
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+    <View style={{ flex: 1 }}>
       {/* Blue top header bar */}
       <View style={[styles.headerBar, { paddingTop: insets.top + 12 }]}>
         <Text style={styles.headerTitle}>הגדרת מלאי ראשוני</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.wizardContainer} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scrollRef} style={{ marginBottom: keyboardOffset }} contentContainerStyle={styles.wizardContainer} keyboardShouldPersistTaps="handled">
+        {/* Back button */}
+        {index > 0 && (
+          <TouchableOpacity style={styles.backItemBtn} onPress={handleBack}>
+            <View style={{ flexDirection: "row" }}>
+              <Ionicons name="chevron-forward" size={28} color="#0262A0" />
+              <Ionicons name="chevron-forward" size={28} color="#0262A0" style={{ marginStart: -12 }} />
+            </View>
+          </TouchableOpacity>
+        )}
+
         {/* Progress */}
         <Text style={styles.progress}>{`פריט ${index + 1} מתוך ${items.length}`}</Text>
         <View style={styles.progressBar}>
@@ -345,35 +420,35 @@ export default function OnboardingWizardScreen({ onComplete }: Props) {
 
         {/* Buttons */}
         <View style={styles.actionBtns}>
-          <TouchableOpacity style={styles.skipItemBtn} onPress={handleSkip}>
-            <Text style={styles.skipItemBtnText}>אל תכלול במלאי</Text>
-          </TouchableOpacity>
           <TouchableOpacity style={styles.includeBtn} onPress={handleInclude}>
             <Text style={styles.includeBtnText}>כלול במלאי</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.skipItemBtn} onPress={handleSkip}>
+            <Text style={styles.skipItemBtnText}>אל תכלול במלאי</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
 
-      {/* Blue bottom bar with exit button */}
-      <View style={[styles.footerBar, { paddingBottom: insets.bottom + 12 }]}>
+      {/* Blue bottom bar with exit button — hidden when keyboard is open */}
+      {!keyboardVisible && <View style={[styles.footerBar, { paddingBottom: insets.bottom + 12 }]}>
         <View style={{ flexDirection: "row", gap: 12 }}>
           <TouchableOpacity style={styles.backBtn} onPress={() => {
-            if (hasReachedSummary) {
-              // Push unprocessed items back into skipped before returning to summary
+            if (hasReachedSummary || cameFromSummary) {
               setSkipped((prev) => [...prev, ...items.slice(index)]);
+              setCameFromSummary(false);
               setPhase("summary");
             } else {
               setPhase("landing");
             }
           }}>
-            <Text style={styles.backBtnText}>חזור</Text>
+            <Text style={styles.backBtnText}>צא</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.exitBtn, { flex: 1 }]} onPress={onComplete}>
-            <Text style={styles.exitBtnText}>צא מהאשף</Text>
+          <TouchableOpacity style={[styles.exitBtn, { flex: 1 }]} onPress={handleExit}>
+            <Text style={styles.exitBtnText}>דלג</Text>
           </TouchableOpacity>
         </View>
-      </View>
-    </KeyboardAvoidingView>
+      </View>}
+    </View>
   );
 }
 
@@ -392,7 +467,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 4,
   },
-  headerTitle: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  headerTitle: { color: "#fff", fontSize: 20, fontWeight: "700" },
 
   footerBar: {
     backgroundColor: "#0262A0",
@@ -430,6 +505,7 @@ const styles = StyleSheet.create({
     marginStart: 12,
   },
 
+  backItemBtn: { alignSelf: "flex-start", padding: 4, marginBottom: 8 },
   actionBtns: { flexDirection: "row", gap: 12, width: "100%", marginBottom: 16 },
   skipItemBtn: {
     flex: 1,
