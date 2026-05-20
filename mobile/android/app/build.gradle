@@ -1,8 +1,11 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+apply plugin: "com.google.gms.google-services"
+apply plugin: "com.google.firebase.crashlytics"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
+def packageVersion = ["node", "-e", "console.log(require('./package.json').version)"].execute(null, new File(projectRoot)).text.trim()
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -98,8 +101,8 @@ android {
         applicationId 'com.itamarbenezra.salvador'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 5
-        versionName "1.0.5"
+        versionCode 15
+        versionName packageVersion
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
